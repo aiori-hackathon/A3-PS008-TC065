@@ -1,0 +1,24 @@
+# 3 FRR routers in a triangle. Start: sudo containerlab deploy -t lab/topology.clab.yml
+# Baseline configs are mounted read-only and copied in at boot, so nothing the
+# routers save (frr-reload runs `write`) can change the files in this repo.
+name: nma
+
+topology:
+  kinds:
+    linux:
+      image: quay.io/frrouting/frr:10.2.1
+      cmd: sh -c "cp /baseline/frr.conf /baseline/vtysh.conf /etc/frr/ && exec /usr/lib/frr/docker-start"
+  nodes:
+    r1:
+      kind: linux
+      binds: [configs/r1/frr.conf:/baseline/frr.conf:ro, configs/vtysh.conf:/baseline/vtysh.conf:ro]
+    r2:
+      kind: linux
+      binds: [configs/r2/frr.conf:/baseline/frr.conf:ro, configs/vtysh.conf:/baseline/vtysh.conf:ro]
+    r3:
+      kind: linux
+      binds: [configs/r3/frr.conf:/baseline/frr.conf:ro, configs/vtysh.conf:/baseline/vtysh.conf:ro]
+  links:
+    - endpoints: ["r1:eth1", "r2:eth1"]   # 10.0.12.0/30
+    - endpoints: ["r2:eth2", "r3:eth1"]   # 10.0.23.0/30
+    - endpoints: ["r1:eth2", "r3:eth2"]   # 10.0.13.0/30

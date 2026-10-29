@@ -1,0 +1,106 @@
+{
+  "$defs": {
+    "AddRoute": {
+      "additionalProperties": false,
+      "properties": {
+        "router": {
+          "description": "Target router, e.g. R1",
+          "title": "Router",
+          "type": "string"
+        },
+        "destination": {
+          "description": "Destination prefix in CIDR, e.g. 10.10.30.0/24",
+          "format": "ipv4network",
+          "title": "Destination",
+          "type": "string"
+        },
+        "requested_by": {
+          "pattern": "^[A-Za-z0-9_.-]{1,32}$",
+          "title": "Requested By",
+          "type": "string"
+        },
+        "reason": {
+          "pattern": "^[A-Za-z0-9 _.,:/()'?!-]{1,200}$",
+          "title": "Reason",
+          "type": "string"
+        },
+        "intent": {
+          "const": "ADD_ROUTE",
+          "title": "Intent",
+          "type": "string"
+        },
+        "next_hop": {
+          "description": "Next-hop IP, or a neighbouring router name (converted to its link IP)",
+          "format": "ipv4",
+          "title": "Next Hop",
+          "type": "string"
+        }
+      },
+      "required": [
+        "router",
+        "destination",
+        "requested_by",
+        "reason",
+        "intent",
+        "next_hop"
+      ],
+      "title": "AddRoute",
+      "type": "object"
+    },
+    "RemoveRoute": {
+      "additionalProperties": false,
+      "properties": {
+        "router": {
+          "description": "Target router, e.g. R1",
+          "title": "Router",
+          "type": "string"
+        },
+        "destination": {
+          "description": "Destination prefix in CIDR, e.g. 10.10.30.0/24",
+          "format": "ipv4network",
+          "title": "Destination",
+          "type": "string"
+        },
+        "requested_by": {
+          "pattern": "^[A-Za-z0-9_.-]{1,32}$",
+          "title": "Requested By",
+          "type": "string"
+        },
+        "reason": {
+          "pattern": "^[A-Za-z0-9 _.,:/()'?!-]{1,200}$",
+          "title": "Reason",
+          "type": "string"
+        },
+        "intent": {
+          "const": "REMOVE_ROUTE",
+          "title": "Intent",
+          "type": "string"
+        }
+      },
+      "required": [
+        "router",
+        "destination",
+        "requested_by",
+        "reason",
+        "intent"
+      ],
+      "title": "RemoveRoute",
+      "type": "object"
+    }
+  },
+  "discriminator": {
+    "mapping": {
+      "ADD_ROUTE": "#/$defs/AddRoute",
+      "REMOVE_ROUTE": "#/$defs/RemoveRoute"
+    },
+    "propertyName": "intent"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/AddRoute"
+    },
+    {
+      "$ref": "#/$defs/RemoveRoute"
+    }
+  ]
+}

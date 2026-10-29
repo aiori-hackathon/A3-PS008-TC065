@@ -1,0 +1,1 @@
+{"intent": "REMOVE_ROUTE", "router": "R1", "destination": "10.10.30.128/25", "requested_by": "operator1", "reason": "legacy detour via R2 no longer needed"}

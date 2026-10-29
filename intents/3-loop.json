@@ -1,0 +1,1 @@
+{"intent": "ADD_ROUTE", "router": "R2", "destination": "10.10.30.128/25", "next_hop": "10.0.12.1", "requested_by": "operator1", "reason": "send upper R3 LAN via R1"}

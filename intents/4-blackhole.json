@@ -1,0 +1,1 @@
+{"intent": "ADD_ROUTE", "router": "R1", "destination": "10.10.40.0/24", "next_hop": "10.0.12.2", "requested_by": "operator1", "reason": "route a network nobody has"}

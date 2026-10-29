@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab change review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#e7ebe4; --panel:#f6f7f3; --ink:#1d2a2b; --soft:#5a6863; --line:#c3cbc0; --wash:#dde3da;
+  --ok:#2c7a4b; --ok-bg:#d9eedf; --bad:#b0281f; --bad-bg:#f5dcd8; --wait:#a56a12; --wait-bg:#f4e6c9;
+  --cable:#2852b8; --cable-bg:#dbe3f6;
+  --sans:"Instrument Sans",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#141a19; --panel:#1c2423; --ink:#e3e9e4; --soft:#9aa8a2; --line:#34403e; --wash:#232d2b;
+  --ok:#6fcf93; --ok-bg:#183626; --bad:#ff8a7e; --bad-bg:#43201c; --wait:#f0b65a; --wait-bg:#3d2d10;
+  --cable:#8eabff; --cable-bg:#1f2a4a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141a19; --panel:#1c2423; --ink:#e3e9e4; --soft:#9aa8a2; --line:#34403e; --wash:#232d2b;
+  --ok:#6fcf93; --ok-bg:#183626; --bad:#ff8a7e; --bad-bg:#43201c; --wait:#f0b65a; --wait-bg:#3d2d10;
+  --cable:#8eabff; --cable-bg:#1f2a4a; color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans)}
+h1,h2,h3{margin:0;line-height:1.2}
+h1{font-size:22px;font-weight:700;letter-spacing:-.01em}
+h2{font-size:18px;font-weight:600}
+h3{font-size:15px;font-weight:600}
+p{margin:0}
+code,pre,.mono{font-family:var(--mono);font-size:13px}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--cable);outline-offset:2px}
+
+.top{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:baseline;padding:18px 24px 14px;border-bottom:1px solid var(--line)}
+.top p{color:var(--soft);font-size:14px}
+.top .health{margin-left:auto;font-size:14px;color:var(--soft)}
+.layout{display:grid;grid-template-columns:minmax(300px,420px) minmax(0,1fr);gap:0;min-height:calc(100vh - 62px)}
+@media (max-width:860px){.layout{grid-template-columns:1fr}}
+aside{border-right:1px solid var(--line);padding:20px 24px;display:flex;flex-direction:column;gap:18px}
+@media (max-width:860px){aside{border-right:0;border-bottom:1px solid var(--line);padding:16px}}
+main{padding:20px 28px 48px;min-width:0;display:flex;flex-direction:column;gap:18px}
+@media (max-width:860px){main{padding:16px}}
+
+/* topology: the one loud element */
+.map svg{width:100%;height:auto;display:block}
+.map .link{stroke:var(--line);stroke-width:5;stroke-linecap:round}
+.map .node circle{fill:var(--panel);stroke:var(--ink);stroke-width:2.5}
+.map .node text{font:700 15px var(--sans);fill:var(--ink);text-anchor:middle;dominant-baseline:central}
+.map .lan{font:12px var(--mono);fill:var(--soft);text-anchor:middle}
+.map .sub{font:11px var(--mono);fill:var(--soft);text-anchor:middle}
+.map .trace{fill:none;stroke-width:4;stroke-linecap:round}
+.map .trace.loop{stroke:var(--bad)} .map .trace.hole{stroke:var(--wait)} .map .trace.new{stroke:var(--cable)}
+.map .x{stroke:var(--wait);stroke-width:4;stroke-linecap:round}
+.legend{font-size:13px;color:var(--soft);min-height:20px}
+@media (prefers-reduced-motion:no-preference){.map .trace{stroke-dasharray:400;stroke-dashoffset:400;animation:draw .7s ease-out forwards}}
+@keyframes draw{to{stroke-dashoffset:0}}
+
+.routes{display:flex;flex-direction:column;gap:10px}
+.routes div{display:grid;grid-template-columns:32px 1fr;gap:4px 8px}
+.routes b{font-weight:600}
+.routes code{color:var(--soft);display:block}
+table{border-collapse:collapse;width:100%}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top;font-size:14px}
+th{font-weight:600;color:var(--soft)}
+.reach td,.reach th{text-align:center;padding:5px 4px;font-size:13px}
+.reach th:first-child,.reach td:first-child{text-align:left}
+.yes{color:var(--ok);font-weight:600} .no{color:var(--soft)}
+
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line)}
+.tabs button{background:none;border:0;border-bottom:3px solid transparent;padding:8px 12px;cursor:pointer;color:var(--soft);font-weight:500}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink)}
+.tabs .count{font-size:12px;background:var(--wait-bg);color:var(--wait);border-radius:10px;padding:1px 7px;margin-left:4px}
+[hidden]{display:none!important}
+
+form{display:grid;gap:14px;max-width:560px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:520px){.row{grid-template-columns:1fr}}
+label{display:grid;gap:4px;font-weight:500;font-size:14px}
+label small{color:var(--soft);font-weight:400}
+input,select{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:8px 10px;width:100%}
+input[type=radio]{width:auto}
+fieldset{border:0;padding:0;margin:0;display:flex;gap:16px;flex-wrap:wrap}
+fieldset legend{font-weight:500;font-size:14px;margin-bottom:4px;padding:0}
+fieldset label{display:flex;gap:6px;align-items:center;font-weight:400}
+.examples{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:14px;color:var(--soft)}
+.examples button{background:var(--wash);border:1px solid var(--line);border-radius:14px;padding:3px 10px;cursor:pointer;font-size:13px;color:var(--ink)}
+.btn{border-radius:6px;padding:9px 16px;font-weight:600;cursor:pointer;border:1px solid var(--ink);background:var(--ink);color:var(--bg)}
+.btn.ghost{background:transparent;color:var(--ink)}
+.btn.go{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn:disabled{opacity:.55;cursor:wait}
+.actions{display:flex;gap:10px;flex-wrap:wrap}
+.err{color:var(--bad);font-size:14px}
+
+.verdict{border-left:5px solid var(--soft);padding:10px 14px;background:var(--panel);border-radius:0 6px 6px 0;display:grid;gap:4px}
+.verdict.ok{border-color:var(--ok)} .verdict.bad{border-color:var(--bad)} .verdict.wait{border-color:var(--wait)}
+.verdict h2{font-size:20px}
+.verdict p{color:var(--soft);overflow-wrap:anywhere}
+.checks{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.checks li{display:grid;grid-template-columns:62px 110px 1fr;gap:10px;align-items:baseline;font-size:14px}
+@media (max-width:520px){.checks li{grid-template-columns:62px 1fr}.checks li span:last-child{grid-column:1/-1}}
+.pill{font-size:12px;font-weight:600;border-radius:4px;padding:1px 0;text-align:center}
+.pill.pass{background:var(--ok-bg);color:var(--ok)} .pill.fail{background:var(--bad-bg);color:var(--bad)}
+.diff{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 0;margin:0;overflow-x:auto}
+.diff div{padding:1px 14px;white-space:pre}
+.diff .add{background:var(--ok-bg);color:var(--ok)} .diff .del{background:var(--bad-bg);color:var(--bad)}
+.decide{display:grid;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px;max-width:620px}
+.trail{list-style:none;margin:0;padding:0;font-size:13px}
+.trail li{display:grid;grid-template-columns:96px 140px 90px 1fr;gap:8px;padding:4px 0;border-bottom:1px solid var(--line)}
+@media (max-width:640px){.trail li{grid-template-columns:80px 1fr}.trail li span:nth-child(n+3){grid-column:1/-1}}
+.trail .mono{color:var(--soft)}
+.status{font-weight:600;font-size:13px;white-space:nowrap}
+.s-SUCCESS{color:var(--ok)} .s-INVALID,.s-BLOCKED,.s-ROLLBACK_FAILED{color:var(--bad)}
+.s-REJECTED,.s-ROLLED_BACK,.s-PENDING_APPROVAL{color:var(--wait)}
+.history tr{cursor:pointer} .history tr:hover td{background:var(--wash)}
+.empty{color:var(--soft)}
+section{display:grid;gap:14px}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Lab change review</h1>
+  <p>Every route change is checked against a model of the network, then waits for a person to approve it.</p>
+  <span class="health" id="health">Connecting to routers…</span>
+</header>
+
+<div class="layout">
+  <aside>
+    <div class="map">
+      <svg viewBox="0 0 360 290" role="img" aria-labelledby="map-title">
+        <title id="map-title">Triangle of routers R1, R2 and R3</title>
+        <defs>
+          <marker id="arrow-loop" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--bad)"/></marker>
+          <marker id="arrow-hole" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--wait)"/></marker>
+          <marker id="arrow-new" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--cable)"/></marker>
+        </defs>
+        <g id="links"></g>
+        <g id="traces"></g>
+        <g id="nodes"></g>
+      </svg>
+      <p class="legend" id="legend"></p>
+    </div>
+    <div>
+      <h3>Who can reach which LAN</h3>
+      <table class="reach" id="reach"></table>
+    </div>
+    <div>
+      <h3>Static routes on the routers now</h3>
+      <div class="routes" id="routes"></div>
+    </div>
+  </aside>
+
+  <main>
+    <nav class="tabs" role="tablist">
+      <button role="tab" id="tab-new" aria-selected="true" data-view="new">New change</button>
+      <button role="tab" id="tab-review" aria-selected="false" data-view="review">Review</button>
+      <button role="tab" id="tab-history" aria-selected="false" data-view="history">History<span class="count" id="pending-count" hidden></span></button>
+    </nav>
+
+    <section id="view-new" role="tabpanel">
+      <div class="examples" id="examples">Try an example:</div>
+      <form id="intent-form">
+        <fieldset>
+          <legend>What should change</legend>
+          <label><input type="radio" name="intent" value="ADD_ROUTE" checked> Add a route</label>
+          <label><input type="radio" name="intent" value="REMOVE_ROUTE"> Remove a route</label>
+        </fieldset>
+        <div class="row">
+          <label>Router <select name="router" id="f-router"></select></label>
+          <label>Destination network <input name="destination" placeholder="10.10.31.0/24" required></label>
+        </div>
+        <label id="nh-field">Next hop <small>an IP on a link to a neighbour, or the neighbour's name such as R3</small>
+          <input name="next_hop" placeholder="10.0.13.2 or R3"></label>
+        <div class="row">
+          <label>Requested by <input name="requested_by" placeholder="operator1" required></label>
+          <label>Reason <input name="reason" placeholder="Why this change is needed" required></label>
+        </div>
+        <div class="actions"><button class="btn" type="submit" id="validate-btn">Validate change</button></div>
+        <p class="err" id="form-err" role="alert"></p>
+      </form>
+    </section>
+
+    <section id="view-review" role="tabpanel" hidden>
+      <p class="empty" id="review-empty">Validate a change, or pick one from History, to review it here.</p>
+      <div id="review" hidden></div>
+    </section>
+
+    <section id="view-history" role="tabpanel" hidden>
+      <table class="history"><thead><tr><th>Change</th><th>Time</th><th>Request</th><th>Status</th></tr></thead><tbody id="history"></tbody></table>
+    </section>
+  </main>
+</div>
+
+<script>
+const POS = {R1:[180,62], R2:[62,212], R3:[298,212]};
+const LAN_OFFSET = {R1:[0,-44], R2:[0,48], R3:[0,48]};
+const STATUS = {PENDING_APPROVAL:"Waiting for approval", SUCCESS:"Deployed", ROLLED_BACK:"Rolled back",
+  ROLLBACK_FAILED:"Rollback failed", BLOCKED:"Blocked", INVALID:"Invalid", REJECTED:"Rejected"};
+const EXAMPLES = [
+  ["Add a route", {intent:"ADD_ROUTE", router:"R1", destination:"10.10.31.0/24", next_hop:"R3", reason:"R1 users need the new R3 server LAN"}],
+  ["Remove a route", {intent:"REMOVE_ROUTE", router:"R1", destination:"10.10.30.128/25", reason:"legacy detour via R2 no longer needed"}],
+  ["Create a loop", {intent:"ADD_ROUTE", router:"R2", destination:"10.10.30.128/25", next_hop:"10.0.12.1", reason:"send upper R3 LAN via R1"}],
+  ["Create a blackhole", {intent:"ADD_ROUTE", router:"R1", destination:"10.10.40.0/24", next_hop:"10.0.12.2", reason:"route a network nobody has"}],
+  ["Conflicting route", {intent:"ADD_ROUTE", router:"R1", destination:"10.10.20.0/24", next_hop:"10.0.13.2", reason:"reach R2 LAN via R3 instead"}],
+  ["Command injection", {intent:"ADD_ROUTE", router:"R1", destination:"10.10.31.0/24; reboot", next_hop:"10.0.13.2", reason:"testing"}],
+];
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const store = {get(k){try{return localStorage.getItem(k)}catch(e){return null}}, set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+let NET = null, current = null, timer = null;
+
+async function api(path, body){
+  const r = await fetch(path, body ? {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)} : {});
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.detail || `request failed (${r.status})`);
+  return data;
+}
+const svg = (tag, attrs) => { const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k,v] of Object.entries(attrs)) el.setAttribute(k, v); return el; };
+
+/* ---------- network map ---------- */
+function ownerOf(ip){ return Object.entries(NET.routers).find(([, r]) => r.addresses.includes(ip))?.[0]; }
+
+function drawMap(){
+  const links = $("links"), nodes = $("nodes"); links.replaceChildren(); nodes.replaceChildren();
+  const names = Object.keys(NET.routers);
+  names.forEach((a, i) => names.slice(i + 1).forEach(b => {
+    const shared = NET.routers[a].connected.find(n => NET.routers[b].connected.includes(n));
+    if (!shared) return;
+    const [x1,y1] = POS[a], [x2,y2] = POS[b];
+    links.append(svg("line", {class:"link", x1, y1, x2, y2}));
+    const t = svg("text", {class:"sub", x:(x1+x2)/2 + (y1===y2 ? 0 : (x1+x2)/2 < 180 ? -36 : 36), y:(y1+y2)/2 + (y1===y2 ? 18 : 0)});
+    t.textContent = shared; links.append(t);
+  }));
+  names.forEach(n => {
+    const [x,y] = POS[n], g = svg("g", {class:"node"});
+    g.append(svg("circle", {cx:x, cy:y, r:24}));
+    const t = svg("text", {x, y}); t.textContent = n; g.append(t);
+    const lans = NET.routers[n].connected.filter(c => c.startsWith("10.10."));
+    lans.forEach((l, i) => { const lt = svg("text", {class:"lan", x:x + LAN_OFFSET[n][0], y:y + LAN_OFFSET[n][1] + i*15}); lt.textContent = l; g.append(lt); });
+    nodes.append(g);
+  });
+}
+
+function drawTrace(path, kind){
+  const g = $("traces");
+  for (let i = 0; i < path.length - 1; i++){
+    const [x1,y1] = POS[path[i]], [x2,y2] = POS[path[i+1]];
+    const dx = x2-x1, dy = y2-y1, len = Math.hypot(dx,dy), nx = -dy/len*7, ny = dx/len*7, cut = 30/len;
+    g.append(svg("line", {class:`trace ${kind}`, x1:x1+dx*cut+nx, y1:y1+dy*cut+ny, x2:x2-dx*cut+nx, y2:y2-dy*cut+ny,
+      "marker-end":`url(#arrow-${kind})`, style:`animation-delay:${i*.25}s`}));
+  }
+  if (kind === "hole"){ const [x,y] = POS[path[path.length-1]];
+    g.append(svg("path", {class:"x", d:`M${x+20} ${y-38}l14 14m0 -14l-14 14`})); }
+}
+
+function showOnMap(c){
+  $("traces").replaceChildren(); $("legend").textContent = "";
+  if (!c) return;
+  const failed = (c.report || []).find(r => !r.ok && (r.check === "loop" || r.check === "blackhole"));
+  const m = failed && failed.detail.match(/R\d(?: → R\d)+/);
+  if (m){
+    drawTrace(m[0].split(" → "), failed.check === "loop" ? "loop" : "hole");
+    $("legend").textContent = failed.check === "loop" ? `Traffic would circle forever: ${m[0]}` : `Traffic would be dropped: ${m[0]}, then nowhere`;
+    return;
+  }
+  const n = c.normalized;
+  if (n && n.next_hop && ownerOf(n.next_hop)){
+    drawTrace([n.router, ownerOf(n.next_hop)], "new");
+    $("legend").textContent = `${n.router} sends ${n.destination} to ${ownerOf(n.next_hop)}`;
+  }
+}
+
+function drawTables(){
+  const lans = [...new Set(NET.reachability.map(x => x.dst))].sort((x, y) => x.localeCompare(y, undefined, {numeric:true}));
+  const by = Object.fromEntries(NET.reachability.map(x => [x.src + x.dst, x]));
+  $("reach").innerHTML = `<thead><tr><th>From</th>${lans.map(l => `<th>${esc(l.replace("10.10.","…"))}</th>`).join("")}</tr></thead><tbody>` +
+    Object.keys(NET.routers).map(s => `<tr><td><b>${s}</b></td>${lans.map(l => { const x = by[s+l];
+      if (!x) return `<td class="no" title="own LAN">·</td>`;
+      return x.outcome === "DELIVERED" ? `<td class="yes" title="${esc(x.path.join(" → "))}">yes</td>`
+        : `<td class="no" title="${esc(x.outcome)}">no</td>`; }).join("")}</tr>`).join("") + "</tbody>";
+  $("routes").innerHTML = Object.entries(NET.routers).map(([n, r]) => `<div><b>${n}</b><span>${
+    r.static.map(([p, nh]) => `<code>${esc(p)} via ${esc(nh)}</code>`).join("") || '<code>no static routes</code>'}</span></div>`).join("");
+}
+
+async function refreshNetwork(){
+  try {
+    NET = await api("/api/routers");
+    drawMap(); drawTables(); showOnMap(current);
+    const audit = await api("/api/audit/verify");
+    $("health").textContent = `3 routers reachable · audit log ${audit.intact ? "intact" : "TAMPERED"}`;
+  } catch(e){ $("health").textContent = `Routers unreachable: ${e.message}`; }
+}
+
+/* ---------- tabs ---------- */
+function show(view){
+  document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.view === view)));
+  ["new","review","history"].forEach(v => $("view-" + v).hidden = v !== view);
+  if (view === "history") loadHistory();
+}
+document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => show(b.dataset.view)));
+
+/* ---------- new change ---------- */
+const form = $("intent-form");
+function syncNextHop(){ $("nh-field").hidden = form.intent.value === "REMOVE_ROUTE"; }
+form.addEventListener("change", syncNextHop);
+EXAMPLES.forEach(([label, ex]) => { const b = document.createElement("button"); b.type = "button"; b.textContent = label;
+  b.onclick = () => { for (const k of ["destination","next_hop","reason"]) form[k].value = ex[k] || "";
+    form.intent.value = ex.intent; form.router.value = ex.router; syncNextHop(); }; $("examples").append(b); });
+
+form.addEventListener("submit", async e => {
+  e.preventDefault(); $("form-err").textContent = "";
+  const f = Object.fromEntries(new FormData(form));
+  const raw = {intent:f.intent, router:f.router, destination:f.destination.trim(), requested_by:f.requested_by.trim(), reason:f.reason.trim()};
+  if (f.intent === "ADD_ROUTE") raw.next_hop = f.next_hop.trim();
+  store.set("nma-requester", raw.requested_by);
+  $("validate-btn").disabled = true; $("validate-btn").textContent = "Checking against the network model…";
+  try { openChange(await api("/api/intent", raw)); }
+  catch(err){ $("form-err").textContent = err.message; }
+  $("validate-btn").disabled = false; $("validate-btn").textContent = "Validate change";
+});
+
+/* ---------- review ---------- */
+function verdict(c){
+  const kind = c.status === "SUCCESS" ? "ok" : c.status === "PENDING_APPROVAL" ? "wait" : ["REJECTED","ROLLED_BACK"].includes(c.status) ? "wait" : "bad";
+  const title = {PENDING_APPROVAL:"All checks passed. Approve or reject this change.", SUCCESS:"Deployed and verified on the routers.",
+    ROLLED_BACK:"Deployment failed, so every router was restored from its snapshot.", ROLLBACK_FAILED:"Deployment failed and the rollback did not fully succeed. Check the routers now.",
+    BLOCKED:"Blocked before it reached any router.", INVALID:"The request is not valid.", REJECTED:"Rejected. Nothing was changed on the routers."}[c.status] || c.status;
+  return `<div class="verdict ${kind}"><h2>${esc(title)}</h2><p>${esc(c.reason)}</p></div>`;
+}
+
+function describe(c){
+  const n = c.normalized || c.intent || {};
+  return n.intent === "REMOVE_ROUTE" ? `Remove route to ${n.destination} on ${n.router}` : `On ${n.router}, send ${n.destination} via ${n.next_hop}`;
+}
+
+async function openChange(c){
+  current = c; clearInterval(timer);
+  const full = await api(`/api/changes/${c.id}`).catch(() => c);
+  current = full; show("review"); showOnMap(full);
+  const pending = full.status === "PENDING_APPROVAL";
+  $("review-empty").hidden = true; const box = $("review"); box.hidden = false;
+  box.innerHTML = `
+    <section>
+      <div><h3>${esc(describe(full))}</h3><p class="empty">Change ${esc(full.id)} · requested by ${esc((full.intent||{}).requested_by)} · ${esc((full.intent||{}).reason)}</p></div>
+      ${verdict(full)}
+      ${(full.report||[]).length ? `<div><h3>Checks in the network model</h3><ul class="checks">${full.report.map(r =>
+        `<li><span class="pill ${r.ok?"pass":"fail"}">${r.ok?"Pass":"Fail"}</span><span>${esc(r.check)}</span><span>${esc(r.detail)}</span></li>`).join("")}</ul></div>` : ""}
+      ${Object.entries(full.diff||{}).map(([r, lines]) => `<div><h3>Config change on ${esc(r)}</h3><pre class="diff">${lines.map(l =>
+        `<div class="${l[0]==="+"?"add":l[0]==="-"?"del":""}">${esc(l)}</div>`).join("")}</pre></div>`).join("")}
+      ${pending ? `<form class="decide" id="decide">
+        <h3>Your decision <span class="empty" id="countdown"></span></h3>
+        <div class="row"><label>Your name <input name="approver" required value="${esc(store.get("nma-approver")||"")}"></label>
+          <label>Reason <input name="reason" placeholder="Optional"></label></div>
+        <label>Failure test <small>forces a failure after approval so you can watch the rollback</small>
+          <select name="simulate_failure"><option value="">Off, deploy normally</option>
+          <option value="deploy">R3 rejects its config mid-deploy</option><option value="health">A link goes down after deploy</option></select></label>
+        <div class="actions"><button class="btn go" type="submit" value="approve">Approve and deploy</button>
+          <button class="btn ghost" type="submit" value="reject">Reject</button></div>
+        <p class="err" id="decide-err" role="alert"></p></form>` : ""}
+      <div><h3>Audit trail</h3><ul class="trail">${(full.events||[]).map(e => `<li><span class="mono">${esc(new Date(e.ts).toLocaleTimeString())}</span>
+        <span>${esc(e.stage)}</span><span class="status s-${e.result==="PASS"||e.result==="OK"||e.result==="APPROVED"?"SUCCESS":esc(e.result)}">${esc(e.result)}</span><span>${esc(e.detail)}</span></li>`).join("")}</ul></div>
+    </section>`;
+  if (pending){
+    const tick = () => { const s = Math.max(0, Math.round(full.expires_at - Date.now()/1000));
+      $("countdown") && ($("countdown").textContent = `auto-rejects in ${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`);
+      if (s === 0){ clearInterval(timer); openChange(full); } };
+    tick(); timer = setInterval(tick, 1000);
+    $("decide").addEventListener("submit", decide);
+  }
+  loadHistory();
+}
+
+async function decide(e){
+  e.preventDefault();
+  const action = e.submitter.value, f = Object.fromEntries(new FormData(e.target));
+  store.set("nma-approver", f.approver);
+  e.target.querySelectorAll("button").forEach(b => b.disabled = true);
+  e.submitter.textContent = action === "approve" ? "Backing up, deploying, checking pings…" : "Rejecting…";
+  try {
+    const c = await api(`/api/changes/${current.id}/${action}`, {approver:f.approver, reason:f.reason, simulate_failure:f.simulate_failure || null});
+    await refreshNetwork(); openChange(c);
+  } catch(err){
+    $("decide-err").textContent = err.message;
+    e.target.querySelectorAll("button").forEach(b => b.disabled = false);
+    e.submitter.textContent = action === "approve" ? "Approve and deploy" : "Reject";
+  }
+}
+
+/* ---------- history ---------- */
+async function loadHistory(){
+  const list = await api("/api/changes").catch(() => []);
+  const pending = list.filter(c => c.status === "PENDING_APPROVAL").length;
+  $("pending-count").hidden = !pending; $("pending-count").textContent = pending;
+  $("history").innerHTML = list.length ? list.map(c => `<tr data-id="${esc(c.id)}"><td class="mono">${esc(c.id)}</td>
+    <td>${new Date(c.created_at*1000).toLocaleTimeString()}</td><td>${esc(describe(c))}</td>
+    <td class="status s-${esc(c.status)}">${esc(STATUS[c.status]||c.status)}</td></tr>`).join("")
+    : `<tr><td colspan="4" class="empty">No changes yet. Start with New change.</td></tr>`;
+  $("history").querySelectorAll("tr[data-id]").forEach(tr => tr.onclick = () => openChange({id:tr.dataset.id}));
+}
+
+/* ---------- start ---------- */
+(async () => {
+  form.requested_by.value = store.get("nma-requester") || "";
+  await refreshNetwork();
+  if (NET) $("f-router").innerHTML = Object.keys(NET.routers).map(n => `<option>${n}</option>`).join("");
+  loadHistory();
+})();
+</script>
+</body>
+</html>
