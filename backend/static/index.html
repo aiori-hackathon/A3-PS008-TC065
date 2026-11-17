@@ -345,7 +345,7 @@ fieldset{border:0;padding:0;margin:0;min-width:0}
 .status::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
 .status.mini{height:20px;padding:0 7px;font-size:.6875rem} .status.mini::before{display:none}
 .s-SUCCESS,.s-PASS,.s-OK,.s-APPROVED,.s-ACCEPTED,.s-running{color:var(--ok)} .s-INVALID,.s-BLOCKED,.s-ROLLBACK_FAILED,.s-FAIL,.s-failed{color:var(--bad)}
-.s-REJECTED,.s-ROLLED_BACK,.s-PENDING_APPROVAL{color:var(--wait)} .s-stopped{color:var(--soft)}
+.s-REJECTED,.s-ROLLED_BACK,.s-PENDING_APPROVAL,.s-PENDING_CONFIRM,.s-WAITING{color:var(--wait)} .s-CONFIRMED{color:var(--ok)} .s-stopped{color:var(--soft)}
 
 /* history */
 .tablebar{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--hair)}
@@ -475,7 +475,7 @@ details.more .tablewrap{margin-top:10px}
     <div class="stats">
       <div class="stat"><span class="tile"><svg class="i"><use href="#i-router"/></svg></span><div><span class="k">Routers</span><b id="st-routers">–</b></div></div>
       <div class="stat"><span class="tile" id="st-links-tile"><svg class="i"><use href="#i-activity"/></svg></span><div><span class="k">Links up</span><b id="st-links">–</b></div></div>
-      <button type="button" class="stat" id="st-pending-btn" title="Open History"><span class="tile wait"><svg class="i"><use href="#i-hourglass"/></svg></span><div><span class="k">Awaiting approval</span><b id="st-pending">0</b></div></button>
+      <button type="button" class="stat" id="st-pending-btn" title="Open History"><span class="tile wait"><svg class="i"><use href="#i-hourglass"/></svg></span><div><span class="k">Waiting on a person</span><b id="st-pending">0</b></div></button>
       <div class="stat"><span class="tile ok" id="st-audit-tile"><svg class="i"><use href="#i-shield"/></svg></span><div><span class="k">Audit log</span><b id="st-audit">–</b></div></div>
     </div>
   </div>

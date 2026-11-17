@@ -9,7 +9,9 @@ Labs
 
 Changes (on the active lab)
   python agent.py status                                    routes and who reaches which LAN
-  python agent.py apply intents/1-add-route.json [--simulate-failure deploy|health [--failure-router R3]]
+  python agent.py apply intents/1-add-route.json [--simulate-failure deploy|health [--failure-router R3]] [--confirm 120]
+  python agent.py confirm <change_id> | cancel <change_id>  confirmed commit: keep it, or roll it back now
+  python agent.py yang-check intents/1-add-route.json       check a request against yang/nma-intent.yang
   python agent.py ask "connect R1 to R4"                    plain language (offline grammar, else the configured LLM)
   python agent.py history | show <change_id> | reset | schema | verify-audit
   python agent.py drift [show|revert|accept]                changes made on the routers outside the agent
@@ -24,7 +26,7 @@ import select
 import sys
 import time
 
-from backend import auth, labctl, labgen, nlp, schema
+from backend import auth, labctl, labgen, nlp, schema, yangcheck
 from backend.engine import db_path, default_engine
 from backend.topology import ROOT, Topology, lab_names
 
@@ -111,14 +113,48 @@ def decide(eng, raw, args, change=None):
         try:
             if answer == "yes":
                 print("Pre-flight, backup, deploy, health check...")
-                c = eng.apply(c["id"], args.approver, reason, args.simulate_failure, args.failure_router)
+                c = eng.apply(c["id"], args.approver, reason, args.simulate_failure, args.failure_router, args.confirm)
             else:
                 c = eng.reject(c["id"], args.approver, reason)
         except ValueError as e:
             print(f"\nRefused: {e}")
             return 1
+    if c["status"] == "PENDING_CONFIRM":
+        c = confirm_or_undo(eng, c, args.approver)
     print(f"\nResult: {paint(c['status'], c['status'])}\n  {c['reason']}")
     return 0 if c["status"] in ("SUCCESS", "REJECTED") else 1
+
+
+def confirm_or_undo(eng, c, who):
+    """Confirmed commit (RFC 6241 8.4): the change is live; keep it only if someone confirms in time."""
+    left = int(c["confirm_by"] - time.time())
+    print(f"\n{c['reason']}\nDeployed as a confirmed commit. Type 'confirm' within {left}s to keep it; "
+          f"anything else, or no answer, rolls every router back: ", end="", flush=True)
+    ready, _, _ = select.select([sys.stdin], [], [], max(left, 0))
+    if ready and sys.stdin.readline().strip().lower() == "confirm":
+        try:
+            return eng.confirm(c["id"], who)
+        except ValueError as e:
+            print(f"\nRefused: {e}. It stays unconfirmed; another approver can run: agent.py confirm {c['id']}")
+            return eng.get(c["id"])
+    print()
+    return eng.get(c["id"]) if not ready else eng.cancel(c["id"], who)  # get() rolls back once the time is up
+
+
+def cmd_confirm(args):
+    eng = default_engine()
+    try:
+        c = (eng.confirm if args.cmd == "confirm" else eng.cancel)(args.change_id, args.by)
+    except (ValueError, KeyError) as e:
+        print(f"Refused: {e}")
+        return 1
+    print(f"{paint(c['status'], c['status'])}  {c['reason']}")
+
+
+def cmd_yang(args):
+    problem = yangcheck.check(json.loads(open(args.file).read()))
+    print(f"{args.file}: " + ("valid against yang/nma-intent.yang" if not problem else f"NOT valid: {problem}"))
+    return 1 if problem else 0
 
 
 def cmd_history(args):
@@ -224,12 +260,20 @@ def main():
     a.add_argument("--approver", default=getpass.getuser())
     a.add_argument("--simulate-failure", choices=["deploy", "health"])
     a.add_argument("--failure-router")
+    a.add_argument("--confirm", type=int, metavar="SECONDS", help="deploy as a confirmed commit (RFC 6241 8.4)")
     q = sub.add_parser("ask")
     q.add_argument("text", nargs="+")
     q.add_argument("--requested-by", default="operator1")
     q.add_argument("--approver", default=getpass.getuser())
     q.add_argument("--simulate-failure", choices=["deploy", "health"])
     q.add_argument("--failure-router")
+    q.add_argument("--confirm", type=int, metavar="SECONDS", help="deploy as a confirmed commit (RFC 6241 8.4)")
+    for name in ("confirm", "cancel"):
+        cc = sub.add_parser(name)
+        cc.add_argument("change_id")
+        cc.add_argument("--by", default=getpass.getuser())
+    y = sub.add_parser("yang-check")
+    y.add_argument("file")
     sub.add_parser("history")
     s = sub.add_parser("show")
     s.add_argument("change_id")
@@ -245,6 +289,7 @@ def main():
     dr.add_argument("--approver", default="approver1")
     dr.add_argument("--simulate-failure", choices=["deploy", "health"])
     dr.add_argument("--failure-router")
+    dr.add_argument("--confirm", type=int, metavar="SECONDS", help="deploy as a confirmed commit (RFC 6241 8.4)")
     lab = sub.add_parser("lab")
     lab.add_argument("action", choices=["list", "new", "deploy", "destroy", "use", "show"])
     lab.add_argument("name", nargs="?")
@@ -257,7 +302,8 @@ def main():
     if args.cmd == "user" and args.action == "add" and not args.name:
         p.error("user add needs a name")
     handler = {"status": cmd_status, "apply": cmd_apply, "ask": cmd_ask, "history": cmd_history, "show": cmd_show, "reset": cmd_reset,
-               "schema": cmd_schema, "verify-audit": cmd_verify, "lab": cmd_lab, "user": cmd_user, "drift": cmd_drift}[args.cmd]
+               "schema": cmd_schema, "verify-audit": cmd_verify, "lab": cmd_lab, "user": cmd_user, "drift": cmd_drift,
+               "confirm": cmd_confirm, "cancel": cmd_confirm, "yang-check": cmd_yang}[args.cmd]
     sys.exit(handler(args) or 0)
 
 

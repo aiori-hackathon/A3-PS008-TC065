@@ -1,7 +1,12 @@
 """The pipeline. plan() runs stages 1-5 and stops at the approval gate; apply() runs 6-9; reject() ends it.
 The terminal (agent.py) and the API (main.py) both call these, and nothing else touches the routers.
 
-Change.status: INVALID | BLOCKED | PENDING_APPROVAL | REJECTED | SUCCESS | ROLLED_BACK | ROLLBACK_FAILED
+Change.status: INVALID | BLOCKED | PENDING_APPROVAL | REJECTED | PENDING_CONFIRM | SUCCESS | ROLLED_BACK | ROLLBACK_FAILED
+
+Confirmed commit (NETCONF, RFC 6241 section 8.4): an approver may deploy with a confirm timeout. The change is then
+live but PENDING_CONFIRM; unless someone confirms it in time, every router is restored from the snapshot. cancel()
+is cancel-commit: roll back now. While a change waits for confirmation no other change can start, because the
+rollback restores the whole snapshot.
 """
 import json
 import re
@@ -11,7 +16,7 @@ import uuid
 
 from pydantic import ValidationError
 
-from backend import checks, deploy, generator, labgen, schema, twin
+from backend import checks, deploy, generator, labgen, schema, twin, yangcheck
 from backend.topology import LABS, ROOT, from_json, net_of, to_json
 from backend.audit import Audit
 from backend.lab import LabError
@@ -21,7 +26,7 @@ from backend.lab import LabError
 class Engine:
     def __init__(self, lab, topo, db_path, snap_dir, timeout=300):
         self.lab, self.topo, self.db, self.snap_dir, self.timeout = lab, topo, Audit(db_path), snap_dir, timeout
-        self.lock = threading.Lock()  # ponytail: one change at a time across the whole lab, which is the point
+        self.lock = threading.RLock()  # ponytail: one change at a time across the whole lab, which is the point
 
     # ---------- stages 1-5 ----------
     def plan(self, raw):
@@ -36,8 +41,11 @@ class Engine:
             intent = schema.parse(c["intent"], self.topo)
         except ValidationError as e:
             return self._stop(c, "INVALID", "schema", schema.errors(e))
+        problem = yangcheck.check(c["intent"])
+        if problem:
+            return self._stop(c, "INVALID", "yang", problem)
         c["normalized"] = intent.model_dump(mode="json")
-        self.db.event(c["id"], "schema", "PASS", "intent is well-formed")
+        self.db.event(c["id"], "schema", "PASS", "intent is well-formed and valid against the YANG model nma-intent (RFC 7950)")
 
         before = self._ready(c)
         if before is None:
@@ -56,6 +64,11 @@ class Engine:
 
     def _ready(self, c):
         """Read the routes and check the lab itself is healthy. Returns the routes, or None after stopping c."""
+        open_ = self.awaiting_confirm()
+        if open_:
+            self._stop(c, "BLOCKED", "confirm", f"change {open_[0]['id']} is deployed but not confirmed yet; "
+                                                "confirm or cancel it first, because its rollback restores the whole network")
+            return None
         try:
             before = self.lab.routes()
             healthy, detail = deploy.preflight(self.lab, self.topo)
@@ -112,7 +125,7 @@ class Engine:
             return self._stop(c, "REJECTED", "approval", f"rejected by {approver}: {reason or 'no reason given'}")
 
     # ---------- stages 7-9 ----------
-    def apply(self, change_id, approver, reason="", simulate_failure=None, failure_router=None):
+    def apply(self, change_id, approver, reason="", simulate_failure=None, failure_router=None, confirm_timeout=None):
         with self.lock:
             c = self._pending(change_id)
             if c["status"] != "PENDING_APPROVAL":
@@ -124,6 +137,8 @@ class Engine:
                 raise ValueError(f"change {change_id} was planned on lab {c['lab']}, the active lab is {self.topo.name}")
             if simulate_failure:
                 deploy.fault(simulate_failure, self.topo, failure_router)  # validates the failure test before anything runs
+            if confirm_timeout is not None and not 10 <= int(confirm_timeout) <= 3600:
+                raise ValueError("confirm timeout must be between 10 and 3600 seconds")
             c.update(approver=approver, approval_reason=reason, approved_at=time.time(),
                      simulate_failure=simulate_failure, failure_router=failure_router)
             self.db.event(c["id"], "approval", "APPROVED", f"approved by {approver}: {reason or 'no reason given'}")
@@ -149,25 +164,67 @@ class Engine:
                     self.db.event(c["id"], "health", "PASS" if ok else "FAIL", detail)
             except LabError as e:
                 ok, detail = False, f"lab error during deploy: {e}"
-            if ok:
-                c.update(status="SUCCESS", stage="done", reason=detail)
-                self._set_approved(after, f"change {c['id']} approved by {approver}")
-                self.db.event(c["id"], "result", "SUCCESS", detail)
+            if not ok:
+                return self._rollback(c, before, configs, "deploy", detail)
+            self._set_approved(after, f"change {c['id']} approved by {approver}")
+            if confirm_timeout:
+                t = int(confirm_timeout)
+                c.update(status="PENDING_CONFIRM", stage="confirm", reason=detail, confirm_timeout=t, confirm_by=time.time() + t)
+                self.db.event(c["id"], "confirm", "WAITING", f"{detail}. Confirmed commit: rolls back automatically unless confirmed within {t}s")
                 self.db.save(c)
                 return c
+            c.update(status="SUCCESS", stage="done", reason=detail)
+            self.db.event(c["id"], "result", "SUCCESS", detail)
+            self.db.save(c)
+            return c
 
-            try:
-                rb_ok, rb_detail = deploy.rollback(self.lab, configs)
-                if rb_ok:
-                    rb_ok, rb_detail = deploy.health(self.lab, before, self.topo)
-            except LabError as e:
-                rb_ok, rb_detail = False, str(e)
-            self.db.event(c["id"], "rollback", "PASS" if rb_ok else "FAIL", rb_detail)
-            if rb_ok:
-                self._set_approved(before, f"rollback of change {c['id']}")
-            status = "ROLLED_BACK" if rb_ok else "ROLLBACK_FAILED"
-            alert = "" if rb_ok else " OPERATOR ACTION NEEDED: network may be inconsistent."
-            return self._stop(c, status, "deploy", f"{detail}. Rollback: {rb_detail}.{alert}")
+    # ---------- confirmed commit ----------
+    def confirm(self, change_id, who):
+        """Make a confirmed-commit change permanent. Like approval, never by the person who requested it."""
+        with self.lock:
+            c = self._pending(change_id)
+            if c["status"] != "PENDING_CONFIRM":
+                raise ValueError(f"change {change_id} is {c['status']}, not waiting for confirmation")
+            _check_person(who, "")
+            if who.lower() == str(c["intent"].get("requested_by", "")).lower():
+                raise ValueError(f"separation of duties: {who} requested this change and cannot also confirm it")
+            c.update(status="SUCCESS", stage="done", confirmed_by=who)
+            self.db.event(c["id"], "confirm", "CONFIRMED", f"confirmed by {who}")
+            self.db.event(c["id"], "result", "SUCCESS", c["reason"])
+            self.db.save(c)
+            return c
+
+    def cancel(self, change_id, who):
+        """cancel-commit: undo a change that is still waiting for confirmation, now."""
+        with self.lock:
+            c = self._pending(change_id)
+            if c["status"] != "PENDING_CONFIRM":
+                raise ValueError(f"change {change_id} is {c['status']}, not waiting for confirmation")
+            _check_person(who, "")
+            return self._undo(c, f"cancelled by {who}")
+
+    def awaiting_confirm(self):
+        """Changes on this lab that are live but not confirmed. Overdue ones are rolled back first."""
+        return [c for c in map(self._expire, self.db.list()) if c["status"] == "PENDING_CONFIRM" and c["lab"] == self.topo.name]
+
+    def _undo(self, c, why):
+        configs = {r: (self.snap_dir / c["id"] / f"{r}.conf").read_text() for r in self.topo.names}
+        return self._rollback(c, from_json(c["before"]), configs, "confirm", why)
+
+    def _rollback(self, c, before, configs, stage, why):
+        """Restore the snapshot on every router, verify, and record the result."""
+        try:
+            ok, detail = deploy.rollback(self.lab, configs)
+            if ok:
+                ok, detail = deploy.health(self.lab, before, self.topo)
+        except LabError as e:
+            ok, detail = False, str(e)
+        self.db.event(c["id"], "rollback", "PASS" if ok else "FAIL", detail)
+        if ok:
+            self._set_approved(before, f"rollback of change {c['id']}")
+        status = "ROLLED_BACK" if ok else "ROLLBACK_FAILED"
+        alert = "" if ok else " OPERATOR ACTION NEEDED: network may be inconsistent."
+        return self._stop(c, status, stage, f"{why}. Rollback: {detail}.{alert}")
 
     # ---------- reads ----------
     def get(self, change_id):
@@ -255,6 +312,15 @@ class Engine:
         if c["status"] == "PENDING_APPROVAL" and time.time() > c["expires_at"]:
             c.update(approver="system")
             return self._stop(c, "REJECTED", "approval", f"no decision within {self.timeout}s, timeout counts as reject")
+        if c["status"] == "PENDING_CONFIRM" and time.time() > c["confirm_by"] and c["lab"] == self.topo.name:
+            # a reader may get here while a deploy holds the lock: skip, the next read (or the server's timer) rolls back
+            if self.lock.acquire(blocking=False):
+                try:
+                    c = self.db.get(c["id"])  # re-read under the lock; another thread may have confirmed it
+                    if c["status"] == "PENDING_CONFIRM":
+                        return self._undo(c, f"not confirmed within {c['confirm_timeout']}s")
+                finally:
+                    self.lock.release()
         return c
 
     def _pending(self, change_id):

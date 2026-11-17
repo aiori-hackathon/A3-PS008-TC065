@@ -1,0 +1,44 @@
+module: nma-intent
+
+  rpcs:
+    +---x submit-intent
+    |  +---w input
+    |  |  +---w intent          enumeration
+    |  |  +---w router          router-name
+    |  |  +---w source          router-name
+    |  |  +---w destination     union
+    |  |  +---w next_hop        union
+    |  |  +---w both_ways?      boolean
+    |  |  +---w reason          safe-text
+    |  |  +---w requested_by?   user-name
+    |  +--ro output
+    |     +--ro id?       change-id
+    |     +--ro status?   change-status
+    |     +--ro reason?   string
+    +---x approve-change
+    |  +---w input
+    |  |  +---w reason?             safe-text
+    |  |  +---w confirm_timeout?    uint32
+    |  |  +---w simulate_failure?   enumeration
+    |  |  +---w failure_router?     router-name
+    |  +--ro output
+    |     +--ro id?       change-id
+    |     +--ro status?   change-status
+    |     +--ro reason?   string
+    +---x reject-change
+    |  +---w input
+    |  |  +---w reason?   safe-text
+    |  +--ro output
+    |     +--ro id?       change-id
+    |     +--ro status?   change-status
+    |     +--ro reason?   string
+    +---x confirm-change
+    |  +--ro output
+    |     +--ro id?       change-id
+    |     +--ro status?   change-status
+    |     +--ro reason?   string
+    +---x cancel-change
+       +--ro output
+          +--ro id?       change-id
+          +--ro status?   change-status
+          +--ro reason?   string

@@ -12,6 +12,7 @@ receive a request                                       dashboard / agent.py / P
     requester = the signed-in user (never taken from the request body)        backend/main.py
 
 validate schema (Pydantic, against this lab's routers)  -> if invalid: log INVALID, STOP   backend/schema.py
+validate against the YANG model nma-intent (RFC 7950)   -> if invalid: log INVALID, STOP   backend/yangcheck.py
 pre-flight: every interface present, up, addressed; every link passes traffic
                                                         -> if not: BLOCKED, STOP          backend/deploy.py
 drift: do the routers match the last approved state?    -> if not: BLOCKED, STOP          backend/engine.py
@@ -36,7 +37,12 @@ try:
     deploy to all routers (any router failing fails the whole change)
     health: every link still passes traffic, routes equal the twin's prediction,
             every LAN pair the twin predicts can ping
-    record the new approved state; SUCCESS
+    record the new approved state
+    if the approver chose a confirmed commit (RFC 6241 8.4):
+        PENDING_CONFIRM; block every other change
+        another approver confirms in time  -> SUCCESS
+        timeout, or "roll back now"        -> restore the snapshot on every router, ROLLED_BACK
+    else SUCCESS
 except failure:
     restore the snapshot on every router (frr-reload), health check again
     ROLLED_BACK, or ROLLBACK_FAILED and alert the operator

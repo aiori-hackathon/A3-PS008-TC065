@@ -1,0 +1,315 @@
+module nma-intent {
+  yang-version 1.1;
+  namespace "urn:aiori:ps008:nma-intent";
+  prefix nma;
+
+  import ietf-inet-types {
+    prefix inet;
+    reference
+      "RFC 6991: Common YANG Data Types";
+  }
+
+  organization
+    "AIORI-3 Hackathon, team A3-PS008-TC065";
+  contact
+    "https://github.com/aiori-hackathon/A3-PS008-TC065";
+  description
+    "Operator intents for the PS-008 network management agent, and the
+     review workflow around them.
+
+     An intent is declarative: it says what the network should do, not
+     which commands to type. The agent alone turns an intent into router
+     configuration, and the only commands it can ever send are
+     'ip route <prefix> <next-hop>' and 'no ip route <prefix> <next-hop>'.
+
+     The JSON body of each API call is the RFC 7951 encoding of the input
+     of the matching RPC below (POST /api/intent is submit-intent, and so
+     on); the change id travels in the URL. Router names are checked
+     against the active lab when the request arrives.
+
+     Deployment follows the NETCONF pattern: the change is validated
+     against a model of the network (the candidate), a person approves it
+     (commit), and it can be deployed as a confirmed commit that rolls
+     back by itself unless it is confirmed in time.";
+
+  revision 2026-11-17 {
+    description
+      "Round 2: CONNECT intent and confirmed commit.";
+    reference
+      "PS-008: Network Management Agent for Reviewed Configuration
+       Changes, AIORI-3 Hackathon.";
+  }
+
+  typedef router-name {
+    type string {
+      pattern '[A-Za-z0-9_.-]{1,32}';
+    }
+    description
+      "A router of the active lab, for example R1.";
+  }
+
+  typedef user-name {
+    type string {
+      pattern '[A-Za-z0-9_.-]{1,32}';
+    }
+    description
+      "A dashboard user.";
+  }
+
+  typedef safe-text {
+    type string {
+      pattern "[A-Za-z0-9 _.,:/()'?!-]{1,200}";
+    }
+    description
+      "Free text such as a reason. It never reaches a router, and shell or
+       CLI metacharacters (; | & $ ` < > newline) are refused anyway.";
+  }
+
+  typedef change-id {
+    type string {
+      pattern '[0-9a-f]{8}';
+    }
+    description
+      "Id the agent gives a change when it is submitted.";
+  }
+
+  typedef change-status {
+    type enumeration {
+      enum INVALID {
+        description
+          "The request does not match this schema.";
+      }
+      enum BLOCKED {
+        description
+          "A check failed; nothing reached a router.";
+      }
+      enum PENDING_APPROVAL {
+        description
+          "Every check passed; waiting for a person to decide.";
+      }
+      enum REJECTED {
+        description
+          "Rejected by a person, or by the approval timeout.";
+      }
+      enum PENDING_CONFIRM {
+        description
+          "Deployed as a confirmed commit; rolls back unless confirmed.";
+      }
+      enum SUCCESS {
+        description
+          "Deployed and verified with pings.";
+      }
+      enum ROLLED_BACK {
+        description
+          "Every router was restored from the snapshot.";
+      }
+      enum ROLLBACK_FAILED {
+        description
+          "The rollback did not fully succeed; an operator must act.";
+      }
+    }
+    description
+      "Where a change stands in the review workflow.";
+  }
+
+  grouping change-result {
+    description
+      "What every workflow RPC returns.";
+    leaf id {
+      type change-id;
+      description
+        "The change.";
+    }
+    leaf status {
+      type change-status;
+      description
+        "Its status after the call.";
+    }
+    leaf reason {
+      type string;
+      description
+        "Why the change has this status, in plain words.";
+    }
+  }
+
+  rpc submit-intent {
+    description
+      "Ask for a change. The agent validates it (schema, semantic checks,
+       routing-loop, blackhole and reachability checks in the digital
+       twin, and the router's own parser) and stops at the approval gate.";
+    input {
+      leaf intent {
+        type enumeration {
+          enum ADD_ROUTE {
+            description
+              "Add one static route on one router.";
+          }
+          enum REMOVE_ROUTE {
+            description
+              "Remove a static route; the agent looks up its next hop.";
+          }
+          enum CONNECT {
+            description
+              "Make one router reach a destination; the agent finds the
+               path and adds routes on every router along it.";
+          }
+        }
+        mandatory true;
+        description
+          "What kind of change this is. Decides which other leaves apply.";
+      }
+      leaf router {
+        when "../intent = 'ADD_ROUTE' or ../intent = 'REMOVE_ROUTE'";
+        type router-name;
+        mandatory true;
+        description
+          "The router whose routing table changes.";
+      }
+      leaf source {
+        when "../intent = 'CONNECT'";
+        type router-name;
+        mandatory true;
+        description
+          "The router that must be able to reach the destination.";
+      }
+      leaf destination {
+        type union {
+          type inet:ipv4-prefix;
+          type router-name;
+        }
+        must "../intent = 'CONNECT' or contains(., '/')" {
+          error-message
+            "ADD_ROUTE and REMOVE_ROUTE need a prefix such as 10.10.30.0/24.";
+        }
+        mandatory true;
+        description
+          "A prefix in CIDR form. CONNECT also accepts a router name,
+           meaning all of that router's LANs.";
+      }
+      leaf next_hop {
+        when "../intent = 'ADD_ROUTE'";
+        type union {
+          type inet:ipv4-address-no-zone;
+          type router-name;
+        }
+        mandatory true;
+        description
+          "The next hop: a directly connected neighbour's address, or its
+           router name (the agent converts it to the link address).";
+      }
+      leaf both_ways {
+        when "../intent = 'CONNECT'";
+        type boolean;
+        default "true";
+        description
+          "Also make the destination reach the source's LANs, which a
+           ping needs.";
+      }
+      leaf reason {
+        type safe-text;
+        mandatory true;
+        description
+          "Why the change is needed. Kept in the audit log.";
+      }
+      leaf requested_by {
+        type user-name;
+        description
+          "Set by the agent from the signed-in session; a value sent by
+           the client is replaced.";
+      }
+    }
+    output {
+      uses change-result;
+    }
+  }
+
+  rpc approve-change {
+    description
+      "Approve a change that is PENDING_APPROVAL. The agent re-checks the
+       network, saves a snapshot of every router, deploys, verifies with
+       pings, and restores the snapshot on every router if anything
+       fails. The person who requested the change cannot approve it.";
+    input {
+      leaf reason {
+        type safe-text;
+        description
+          "Why it was approved. Kept in the audit log.";
+      }
+      leaf confirm_timeout {
+        type uint32 {
+          range "10..3600";
+        }
+        units "seconds";
+        description
+          "Deploy as a confirmed commit: unless confirm-change is called
+           within this time, every router is restored from the snapshot.
+           No other change can start while one is waiting. Leave out to
+           deploy normally.";
+        reference
+          "RFC 6241: Network Configuration Protocol (NETCONF),
+           Section 8.4 (Confirmed Commit Capability)";
+      }
+      leaf simulate_failure {
+        type enumeration {
+          enum deploy {
+            description
+              "A router rejects its configuration in the middle of the
+               deployment.";
+          }
+          enum health {
+            description
+              "A link goes down after the deployment.";
+          }
+        }
+        description
+          "Failure test for demonstrations: forces the rollback path.";
+      }
+      leaf failure_router {
+        when "../simulate_failure";
+        type router-name;
+        description
+          "Where the failure test happens.";
+      }
+    }
+    output {
+      uses change-result;
+    }
+  }
+
+  rpc reject-change {
+    description
+      "Reject a change that is PENDING_APPROVAL. Nothing is deployed.";
+    input {
+      leaf reason {
+        type safe-text;
+        description
+          "Why it was rejected. Kept in the audit log.";
+      }
+    }
+    output {
+      uses change-result;
+    }
+  }
+
+  rpc confirm-change {
+    description
+      "Make a PENDING_CONFIRM change permanent (the confirming commit).
+       The person who requested the change cannot confirm it.";
+    reference
+      "RFC 6241, Section 8.4";
+    output {
+      uses change-result;
+    }
+  }
+
+  rpc cancel-change {
+    description
+      "Roll a PENDING_CONFIRM change back now, like NETCONF's
+       cancel-commit.";
+    reference
+      "RFC 6241, Section 8.4";
+    output {
+      uses change-result;
+    }
+  }
+}

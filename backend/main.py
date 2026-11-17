@@ -5,8 +5,10 @@ Who requested or approved a change comes from the session, never from the reques
 """
 import json
 import shutil
+import threading
 import time
 import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -15,12 +17,28 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from backend import auth, deploy, examples, labctl, labgen, nlp, schema
+from backend import auth, deploy, examples, labctl, labgen, nlp, schema, yangcheck
 from backend.engine import db_path, default_engine
 from backend.lab import LabError
 from backend.topology import LABS, ROOT, Topology, TopologyError, lab_names, to_json
 
-app = FastAPI(title="PS-008 Network Management Agent")
+def _confirm_timer():
+    """Unconfirmed changes roll back on time even when nobody has the dashboard open."""
+    while True:
+        time.sleep(5)
+        try:
+            eng().awaiting_confirm()
+        except Exception as e:  # lab down or being redeployed: try again next tick
+            print(f"confirm timer: {e}")
+
+
+@asynccontextmanager
+async def lifespan(app):
+    threading.Thread(target=_confirm_timer, daemon=True, name="confirm-timer").start()
+    yield
+
+
+app = FastAPI(title="PS-008 Network Management Agent", lifespan=lifespan)
 STATIC = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
@@ -289,6 +307,7 @@ class Decision(BaseModel):
     reason: str = ""
     simulate_failure: Optional[Literal["deploy", "health"]] = None
     failure_router: Optional[str] = None
+    confirm_timeout: Optional[int] = None  # seconds; set = confirmed commit (RFC 6241 8.4)
 
 
 @app.post("/api/intent")
@@ -312,14 +331,41 @@ def change(change_id: str, user=OPERATOR):
 
 @app.post("/api/changes/{change_id}/approve")
 def approve(change_id: str, d: Decision, user=APPROVER):
-    return _call(eng().apply, change_id, user["name"], d.reason, d.simulate_failure, d.failure_router)
+    _yang(d, "approve-change")
+    return _call(eng().apply, change_id, user["name"], d.reason, d.simulate_failure, d.failure_router, d.confirm_timeout)
+
+
+@app.post("/api/changes/{change_id}/confirm")
+def confirm(change_id: str, user=APPROVER):
+    return _call(eng().confirm, change_id, user["name"])
+
+
+@app.post("/api/changes/{change_id}/cancel")
+def cancel(change_id: str, user=APPROVER):
+    """cancel-commit: roll a change that is waiting for confirmation back now."""
+    return _call(eng().cancel, change_id, user["name"])
 
 
 @app.post("/api/changes/{change_id}/reject")
 def reject(change_id: str, d: Decision, user=APPROVER):
+    _yang({"reason": d.reason}, "reject-change")
     return _call(eng().reject, change_id, user["name"], d.reason)
+
+
+def _yang(body, rpc):
+    """Check a decision against the matching RPC of yang/nma-intent.yang. Empty values mean 'not given'."""
+    doc = body if isinstance(body, dict) else body.model_dump()
+    problem = yangcheck.check({k: v for k, v in doc.items() if v not in (None, "")}, rpc)
+    if problem:
+        raise HTTPException(400, f"not valid against nma-intent.yang: {problem}")
 
 
 @app.get("/api/schema")
 def intent_schema():
     return schema.json_schema()
+
+
+@app.get("/api/yang", include_in_schema=False)
+def yang_module():
+    """The intent contract as a YANG 1.1 module (RFC 7950)."""
+    return FileResponse(yangcheck.YANG / "nma-intent.yang", media_type="application/yang")

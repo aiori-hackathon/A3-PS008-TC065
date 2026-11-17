@@ -14,7 +14,7 @@ const PAGES = {
   review: ["Review", "The safety checks, the exact config lines and the decision for one change."],
   history: ["History", "Every change that was requested, and what happened to it."],
   labs: ["Labs", "Saved practice networks. Start one, switch to it, or build a new one."]};
-const STATUS = {PENDING_APPROVAL: "Waiting for approval", SUCCESS: "Deployed", ROLLED_BACK: "Rolled back",
+const STATUS = {PENDING_APPROVAL: "Waiting for approval", PENDING_CONFIRM: "Waiting for confirmation", SUCCESS: "Deployed", ROLLED_BACK: "Rolled back",
   ROLLBACK_FAILED: "Rollback failed", BLOCKED: "Blocked", INVALID: "Invalid", REJECTED: "Rejected"};
 
 let NET = null, HEALTH = null, current = null, timer = null, busy = false, labKey = "", ME = null;
@@ -248,13 +248,14 @@ $("ask-form").addEventListener("submit", async e => {
 
 /* ---------- review ---------- */
 function verdict(c) {
-  const kind = c.status === "SUCCESS" ? "ok" : ["PENDING_APPROVAL", "REJECTED", "ROLLED_BACK"].includes(c.status) ? "wait" : "bad";
+  const kind = c.status === "SUCCESS" ? "ok" : ["PENDING_APPROVAL", "PENDING_CONFIRM", "REJECTED", "ROLLED_BACK"].includes(c.status) ? "wait" : "bad";
   const title = {PENDING_APPROVAL: "All checks passed. Approve or reject this change.", SUCCESS: "Deployed and verified on the routers.",
+    PENDING_CONFIRM: "Deployed and verified. Confirm it, or every router rolls back by itself.",
     ROLLED_BACK: "Deployment failed, so every router was restored from its snapshot.",
     ROLLBACK_FAILED: "Deployment failed and the rollback did not fully succeed. Check the routers now.",
     BLOCKED: "Blocked before it reached any router.", INVALID: "The request is not valid.",
     REJECTED: "Rejected. Nothing was changed on the routers."}[c.status] || c.status;
-  const mark = kind === "ok" ? "check-circle" : c.status === "PENDING_APPROVAL" ? "hourglass" : c.status === "ROLLED_BACK" ? "undo" : kind === "wait" ? "x-circle" : "alert";
+  const mark = kind === "ok" ? "check-circle" : ["PENDING_APPROVAL", "PENDING_CONFIRM"].includes(c.status) ? "hourglass" : c.status === "ROLLED_BACK" ? "undo" : kind === "wait" ? "x-circle" : "alert";
   return `<div class="verdict ${kind}">${icon(mark)}<div><h2>${esc(title)}</h2><p>${esc(c.reason)}</p></div></div>`;
 }
 
@@ -268,7 +269,8 @@ function progress(c) {
   const ev = c.events || [], approved = ev.some(e => e.stage === "approval" && e.result === "APPROVED");
   const afterDeploy = ev.some(e => e.stage === "health") ? 4 : 3;
   const fail = {INVALID: 0, BLOCKED: approved ? 3 : 1, REJECTED: 2, ROLLED_BACK: afterDeploy, ROLLBACK_FAILED: afterDeploy}[c.status];
-  return c.status === "SUCCESS" ? steps(5) : c.status === "PENDING_APPROVAL" ? steps(2) : steps(fail ?? 0, fail ?? -1);
+  return c.status === "SUCCESS" ? steps(5) : c.status === "PENDING_APPROVAL" ? steps(2) : c.status === "PENDING_CONFIRM" ? steps(4)
+    : steps(fail ?? 0, fail ?? -1);
 }
 
 function traceChange(c) {
@@ -300,7 +302,7 @@ async function openChange(c) {
   const top = $("view-review").getBoundingClientRect().top;  // one-column layouts: bring the review into view
   if (arriving && (top < 60 || top > innerHeight * 0.6)) $("view-review").scrollIntoView({behavior: "smooth"});
   if (NET && full.lab === NET.name) traceChange(full);
-  const pending = full.status === "PENDING_APPROVAL";
+  const pending = full.status === "PENDING_APPROVAL", confirming = full.status === "PENDING_CONFIRM";
   const mine = (full.intent || {}).requested_by === ME.name, canApprove = ME.role !== "operator";
   const names = NET ? Object.keys(NET.routers) : [];
   $("review-empty").hidden = true; const box = $("review"); box.hidden = false;
@@ -321,7 +323,10 @@ async function openChange(c) {
       ${mine ? "You requested this change, so someone else has to approve it." : "Your role cannot approve changes."}</span></p>` : ""}
     ${pending && !mine && canApprove ? `<form class="decide" id="decide">
       <div class="sub"><h3>Your decision as ${esc(ME.name)}</h3><span class="hint" id="countdown"></span></div>
-      <label><span class="lab">Reason</span><input name="reason" placeholder="Optional"></label>
+      <div class="row"><label><span class="lab">Reason</span><input name="reason" placeholder="Optional"></label>
+        <label><span class="lab">Deploy as <small>confirmed commit, RFC 6241</small></span><select name="confirm_timeout">
+          <option value="">Permanent change</option><option value="120">Confirmed commit, undo in 2 min</option>
+          <option value="300">Confirmed commit, undo in 5 min</option><option value="600">Confirmed commit, undo in 10 min</option></select></label></div>
       <div class="row"><label><span class="lab">Failure test <small>forces a failure to show the rollback</small></span>
         <select name="simulate_failure"><option value="">Off, deploy normally</option>
         <option value="deploy">Router rejects its config mid-deploy</option><option value="health">A link goes down after deploy</option></select></label>
@@ -329,16 +334,26 @@ async function openChange(c) {
       <div class="actions"><button class="btn go lg" type="submit" value="approve">${icon("check")}Approve and deploy</button>
         <button class="btn ghost lg danger" type="submit" value="reject">${icon("x")}Reject</button></div>
       <p class="err" id="decide-err" role="alert"></p></form>` : ""}
+    ${confirming && (mine || !canApprove) ? `<p class="note">${icon("hourglass")}<span>Live on the routers, waiting for an approver to confirm it.
+      <span id="countdown"></span>. ${mine ? "You requested this change, so someone else has to confirm it." : "Your role cannot confirm changes."}</span></p>` : ""}
+    ${confirming && !mine && canApprove ? `<form class="decide" id="confirm-form">
+      <div class="sub"><h3>Keep this change?</h3><span class="hint" id="countdown"></span></div>
+      <p class="hint">It is live and the pings passed. If nobody confirms it in time, every router is restored from the snapshot, like a NETCONF confirmed commit.</p>
+      <div class="actions"><button class="btn go lg" type="submit" value="confirm">${icon("check")}Confirm and keep</button>
+        <button class="btn ghost lg danger" type="submit" value="cancel">${icon("undo")}Roll back now</button></div>
+      <p class="err" id="decide-err" role="alert"></p></form>` : ""}
     <div class="blk"><h3>Audit trail</h3><ol class="trail">${(full.events || []).map(e => `<li><span class="pt s-${esc(e.result)}"></span>
       <div><b>${esc(e.stage)}</b><span class="status mini s-${esc(e.result)}">${esc(e.result)}</span><p>${esc(e.detail)}</p></div>
       <time class="mono">${esc(new Date(e.ts).toLocaleTimeString())}</time></li>`).join("")}</ol></div>`;
   if (arriving) enter(box.children);
-  if (pending) {
-    const tick = () => { const s = Math.max(0, Math.round(full.expires_at - Date.now() / 1000));
-      if ($("countdown")) $("countdown").textContent = `auto-rejects in ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  if (pending || confirming) {
+    const deadline = pending ? full.expires_at : full.confirm_by, what = pending ? "auto-rejects" : "rolls back";
+    const tick = () => { const s = Math.max(0, Math.round(deadline - Date.now() / 1000));
+      if ($("countdown")) $("countdown").textContent = `${what} in ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
       if (s === 0) { clearInterval(timer); openChange(full); } };
     tick(); timer = setInterval(tick, 1000);
     $("decide")?.addEventListener("submit", decide);
+    $("confirm-form")?.addEventListener("submit", decide);
   }
   loadHistory();
 }
@@ -348,10 +363,11 @@ async function decide(e) {
   const action = e.submitter.value, f = Object.fromEntries(new FormData(e.target));
   const buttons = e.target.querySelectorAll("button"); buttons.forEach(b => b.disabled = true);
   const label = e.submitter.innerHTML;
-  e.submitter.textContent = action === "approve" ? "Pre-flight, backup, deploy, pings…" : "Rejecting…";
+  e.submitter.textContent = {approve: "Pre-flight, backup, deploy, pings…", reject: "Rejecting…", confirm: "Confirming…", cancel: "Restoring every router…"}[action];
   try {
-    const c = await api(`/api/changes/${current.id}/${action}`, {reason: f.reason,
-      simulate_failure: f.simulate_failure || null, failure_router: f.simulate_failure ? f.failure_router : null});
+    const c = await api(`/api/changes/${current.id}/${action}`, ["confirm", "cancel"].includes(action) ? {} : {reason: f.reason,
+      simulate_failure: f.simulate_failure || null, failure_router: f.simulate_failure ? f.failure_router : null,
+      confirm_timeout: f.confirm_timeout ? Number(f.confirm_timeout) : null});
     await refresh(); loadExamples(); openChange(c);
   } catch (err) {
     $("decide-err").textContent = err.message; buttons.forEach(b => b.disabled = false); e.submitter.innerHTML = label;
@@ -361,7 +377,7 @@ async function decide(e) {
 /* ---------- history ---------- */
 let HIST = [], hFilter = "all";
 const GROUPS = {  // label, dot colour, which statuses
-  all: ["All", "none", () => true], waiting: ["Waiting", "wait", s => s === "PENDING_APPROVAL"], deployed: ["Deployed", "ok", s => s === "SUCCESS"],
+  all: ["All", "none", () => true], waiting: ["Waiting", "wait", s => s.startsWith("PENDING")], deployed: ["Deployed", "ok", s => s === "SUCCESS"],
   stopped: ["Stopped", "bad", s => ["BLOCKED", "INVALID", "REJECTED"].includes(s)], rolled: ["Rolled back", "wait", s => s.startsWith("ROLL")]};
 
 function drawHistory() {
@@ -383,7 +399,7 @@ $("st-pending-btn").onclick = () => { hFilter = "waiting"; show("history"); };
 
 async function loadHistory() {
   HIST = await api("/api/changes").catch(() => []);
-  const pending = HIST.filter(c => c.status === "PENDING_APPROVAL").length;
+  const pending = HIST.filter(c => c.status.startsWith("PENDING")).length;
   $("pending-count").hidden = !pending; $("pending-count").textContent = pending; $("st-pending").textContent = pending;
   drawHistory();
 }
