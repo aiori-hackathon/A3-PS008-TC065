@@ -2,7 +2,7 @@
 conflicting routes, invalid configurations, rejected approvals, failed deployments."""
 import time
 
-from backend import generator, net, twin
+from backend import generator, twin
 from backend.engine import Engine
 
 ADD = {"intent": "ADD_ROUTE", "router": "R1", "destination": "10.10.31.0/24", "next_hop": "10.0.13.2",
@@ -72,7 +72,7 @@ def test_08_loop_blocked_by_twin(engine):
     assert c["status"] == "BLOCKED" and c["stage"] == "twin" and "R2 → R1 → R2" in c["reason"]
     # three-router loop on a plain table: R1 closing R2 → R3 → R1
     t = {"R1": set(), "R2": {("10.99.0.0/16", "10.0.23.2")}, "R3": {("10.99.0.0/16", "10.0.13.1")}}
-    _, report = twin.validate(t, {"R1": ["ip route 10.99.0.0/16 10.0.12.2"]})
+    _, report = twin.validate(t, {"R1": ["ip route 10.99.0.0/16 10.0.12.2"]}, engine.topo)
     assert not report[0]["ok"] and "R1 → R2 → R3 → R1" in report[0]["detail"]
 
 
@@ -85,8 +85,8 @@ def test_09_human_rejects(engine, lab):
     assert engine.apply(c["id"], "approver1")["status"] == "REJECTED"  # a rejected change can never deploy
 
 
-def test_10_approval_timeout(lab, tmp_path):
-    eng = Engine(lab, tmp_path / "a.db", tmp_path / "s", timeout=1)
+def test_10_approval_timeout(lab, topo, tmp_path):
+    eng = Engine(lab, topo, tmp_path / "a.db", tmp_path / "s", timeout=1)
     before = lab.routes()
     c = eng.plan(ADD)
     time.sleep(1.2)
@@ -105,7 +105,7 @@ def test_11_deploy_fails_midway_all_rolled_back(engine, lab):
 def test_12_deploy_ok_but_pings_fail(engine, lab):
     before = lab.routes()
     c = approved(engine, ADD, fault="health")
-    assert c["status"] == "ROLLED_BACK" and "ping failed" in c["reason"]
+    assert c["status"] == "ROLLED_BACK" and "R3 eth1 is down" in c["reason"]  # the dead link is named, then restored
     assert lab.routes() == before and lab.ping("R2", "10.10.20.1", "10.10.30.1")
 
 
@@ -149,7 +149,7 @@ def test_18_several_changes_in_a_row(engine, lab):
 def test_19_rollback_matches_snapshot(engine, lab):
     c = approved(engine, ADD, fault="deploy")
     assert c["status"] == "ROLLED_BACK"
-    for r in net.NAMES:
+    for r in engine.topo.names:
         assert lab.running_config(r) == (engine.snap_dir / c["id"] / f"{r}.conf").read_text(), r
 
 
@@ -158,7 +158,7 @@ def test_20_audit_log_complete_and_tamper_evident(engine):
     bad = engine.plan(intent(router="R99"))
     rej = engine.reject(engine.plan(REMOVE)["id"], "approver1", "no")
     stages = lambda c: [e["stage"] for e in engine.db.events(c["id"])]
-    assert stages(ok)[:4] == ["received", "schema", "semantic", "generate"]
+    assert stages(ok)[:5] == ["received", "schema", "preflight", "semantic", "generate"]
     assert {"twin.loop", "twin.blackhole", "twin.reachability", "twin.syntax", "validation",
             "approval", "backup", "deploy", "health", "result"} <= set(stages(ok))
     assert stages(bad) == ["received", "schema"] and stages(rej)[-1] == "approval"

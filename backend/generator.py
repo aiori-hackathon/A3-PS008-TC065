@@ -3,19 +3,22 @@ import re
 
 from jinja2 import Environment, StrictUndefined
 
-_env = Environment(undefined=StrictUndefined, trim_blocks=True)
+_env = Environment(undefined=StrictUndefined)
 TEMPLATES = {
-    "ADD_ROUTE": _env.from_string("{% for nh in next_hops %}ip route {{ destination }} {{ nh }}\n{% endfor %}"),
-    "REMOVE_ROUTE": _env.from_string("{% for nh in next_hops %}no ip route {{ destination }} {{ nh }}\n{% endfor %}"),
+    "add": _env.from_string("ip route {{ prefix }} {{ next_hop }}"),
+    "remove": _env.from_string("no ip route {{ prefix }} {{ next_hop }}"),
 }
 
 _IP = r"(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}"
 ALLOWED = re.compile(rf"(?:no )?ip route {_IP}/(?:3[0-2]|[12]?\d) {_IP}")
 
 
-def generate(intent, next_hops):
-    text = TEMPLATES[intent.intent].render(destination=intent.destination, next_hops=next_hops)
-    return {intent.router: text.splitlines()}
+def generate(ops):
+    """ops from checks.semantic -> {router: [config lines]}"""
+    candidate = {}
+    for router, op, prefix, next_hop in ops:
+        candidate.setdefault(router, []).append(TEMPLATES[op].render(prefix=prefix, next_hop=next_hop))
+    return candidate
 
 
 def not_allowed(candidate):

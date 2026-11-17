@@ -6,6 +6,7 @@ __pycache__/
 # runtime state: audit DB and the snapshot repo (its own git repo, created on first deploy)
 data/
 snapshots/
-# containerlab working dir
-lab/clab-nma/
-lab/.*.bak
+# generated per lab: containerlab files, router configs, containerlab working dir
+labs/*/build/
+# local secrets (LLM API key)
+.env

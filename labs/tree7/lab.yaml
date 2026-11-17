@@ -1,0 +1,11 @@
+name: tree7
+template: tree
+baseline: shortest-path
+routers: [R1, R2, R3, R4, R5, R6, R7]
+links:
+- [R1, R2]
+- [R1, R3]
+- [R2, R4]
+- [R2, R5]
+- [R3, R6]
+- [R3, R7]

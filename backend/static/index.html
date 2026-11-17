@@ -2,411 +2,625 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Lab change review</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Network change review</title>
+<script>document.documentElement.dataset.theme = localStorage.getItem("theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");</script>
 <style>
+/* Tokens. Light is the default; the script in <head> sets data-theme from the saved choice or the system. */
 :root{
-  --bg:#e7ebe4; --panel:#f6f7f3; --ink:#1d2a2b; --soft:#5a6863; --line:#c3cbc0; --wash:#dde3da;
-  --ok:#2c7a4b; --ok-bg:#d9eedf; --bad:#b0281f; --bad-bg:#f5dcd8; --wait:#a56a12; --wait-bg:#f4e6c9;
-  --cable:#2852b8; --cable-bg:#dbe3f6;
-  --sans:"Instrument Sans",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  --bg:#f2f4f9; --surface:#fff; --field:#fff; --well:#f6f7fb; --ink:#0f1729; --soft:#586174; --faint:#8b93a5;
+  --line:rgba(15,23,41,.13); --hair:rgba(15,23,41,.075); --wash:rgba(15,23,41,.045);
+  --accent:#1c5bd9; --accent-solid:#2468f2; --accent-2:#5a55f2; --accent-bg:rgba(36,104,242,.1); --accent-fill:#e8f0fe;
+  --grad:linear-gradient(135deg,#2e7bff,#4d54ee);
+  --ok:#0f7a43; --ok-solid:#16a05a; --ok-bg:rgba(22,160,90,.13);
+  --bad:#c41f36; --bad-solid:#e0354b; --bad-bg:rgba(224,53,75,.11); --bad-fill:#fdebee;
+  --wait:#96560a; --wait-solid:#e8930c; --wait-bg:rgba(232,147,12,.16);
+  --glass:rgba(255,255,255,.7); --glass-edge:rgba(255,255,255,.85);
+  --shadow:0 1px 2px rgba(15,23,41,.04),0 10px 28px -8px rgba(15,23,41,.1);
+  --lift:0 2px 6px rgba(15,23,41,.07),0 24px 60px -12px rgba(15,23,41,.22);
+  --glow:0 8px 18px -8px rgba(36,104,242,.65);
+  --link:rgba(36,104,242,.5); --dot:rgba(15,23,41,.1);
+  --glow-a:rgba(46,123,255,.13); --glow-b:rgba(110,86,245,.1);
+  --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",system-ui,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
   color-scheme:light;
 }
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --bg:#141a19; --panel:#1c2423; --ink:#e3e9e4; --soft:#9aa8a2; --line:#34403e; --wash:#232d2b;
-  --ok:#6fcf93; --ok-bg:#183626; --bad:#ff8a7e; --bad-bg:#43201c; --wait:#f0b65a; --wait-bg:#3d2d10;
-  --cable:#8eabff; --cable-bg:#1f2a4a; color-scheme:dark}}
 :root[data-theme="dark"]{
-  --bg:#141a19; --panel:#1c2423; --ink:#e3e9e4; --soft:#9aa8a2; --line:#34403e; --wash:#232d2b;
-  --ok:#6fcf93; --ok-bg:#183626; --bad:#ff8a7e; --bad-bg:#43201c; --wait:#f0b65a; --wait-bg:#3d2d10;
-  --cable:#8eabff; --cable-bg:#1f2a4a; color-scheme:dark}
+  --bg:#07090f; --surface:#10141d; --field:rgba(255,255,255,.05); --well:rgba(255,255,255,.04); --ink:#eef1f8; --soft:#9aa3b6; --faint:#6f788b;
+  --line:rgba(255,255,255,.15); --hair:rgba(255,255,255,.085); --wash:rgba(255,255,255,.06);
+  --accent:#86b0ff; --accent-solid:#3f7dff; --accent-2:#7a74ff; --accent-bg:rgba(79,140,255,.17); --accent-fill:#14264a;
+  --grad:linear-gradient(135deg,#3d84ff,#6660f5);
+  --ok:#43d98a; --ok-solid:#1fae66; --ok-bg:rgba(67,217,138,.14);
+  --bad:#ff7a85; --bad-solid:#e5475b; --bad-bg:rgba(255,99,115,.16); --bad-fill:#3a1319;
+  --wait:#ffbf5c; --wait-solid:#e8930c; --wait-bg:rgba(255,178,64,.16);
+  --glass:rgba(19,23,33,.66); --glass-edge:rgba(255,255,255,.12);
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 32px -8px rgba(0,0,0,.55);
+  --lift:0 2px 6px rgba(0,0,0,.5),0 26px 64px -12px rgba(0,0,0,.8);
+  --glow:0 8px 20px -8px rgba(63,125,255,.8);
+  --link:rgba(110,160,255,.55); --dot:rgba(255,255,255,.08);
+  --glow-a:rgba(46,110,255,.2); --glow-b:rgba(120,90,255,.13);
+  color-scheme:dark;
+}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans)}
-h1,h2,h3{margin:0;line-height:1.2}
-h1{font-size:22px;font-weight:700;letter-spacing:-.01em}
-h2{font-size:18px;font-weight:600}
-h3{font-size:15px;font-weight:600}
+html{font-size:100%;-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:.9375rem/1.47 var(--sans);-webkit-font-smoothing:antialiased}
+/* Still, soft light behind the page so the glass layers have something to pick up. */
+body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:radial-gradient(58rem 38rem at -4% -14%,var(--glow-a),transparent 64%),radial-gradient(50rem 36rem at 104% 108%,var(--glow-b),transparent 62%)}
+h1,h2,h3{margin:0;font-weight:600}
+h1{font-size:1.625rem;line-height:1.15;letter-spacing:-.028em;font-weight:650}
+h2{font-size:1.0625rem;line-height:1.25;letter-spacing:-.016em}
+h3{font-size:.875rem;line-height:1.3;letter-spacing:-.006em}
 p{margin:0}
-code,pre,.mono{font-family:var(--mono);font-size:13px}
-button,input,select{font:inherit;color:inherit}
-:focus-visible{outline:2px solid var(--cable);outline-offset:2px}
+code,pre,.mono{font-family:var(--mono);font-size:.8125rem}
+button,input,select,textarea{font:inherit;color:inherit;letter-spacing:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent-solid);outline-offset:2px}
+[hidden]{display:none!important}
+::view-transition{pointer-events:none}  /* the theme cross-fade never blocks a click */
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.i{width:1em;height:1em;flex:none;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.hint{color:var(--soft);font-size:.8125rem;font-weight:400}
+.grow{flex:1;min-width:0}
 
-.top{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:baseline;padding:18px 24px 14px;border-bottom:1px solid var(--line)}
-.top p{color:var(--soft);font-size:14px}
-.top .health{margin-left:auto;font-size:14px;color:var(--soft)}
-.layout{display:grid;grid-template-columns:minmax(300px,420px) minmax(0,1fr);gap:0;min-height:calc(100vh - 62px)}
-@media (max-width:860px){.layout{grid-template-columns:1fr}}
-aside{border-right:1px solid var(--line);padding:20px 24px;display:flex;flex-direction:column;gap:18px}
-@media (max-width:860px){aside{border-right:0;border-bottom:1px solid var(--line);padding:16px}}
-main{padding:20px 28px 48px;min-width:0;display:flex;flex-direction:column;gap:18px}
-@media (max-width:860px){main{padding:16px}}
+/* Glass: a translucent layer with a bright top edge. Only for chrome that floats over content. */
+.glass{background:var(--glass);-webkit-backdrop-filter:blur(26px) saturate(180%);backdrop-filter:blur(26px) saturate(180%);
+  border:1px solid var(--hair);box-shadow:inset 0 1px 0 var(--glass-edge)}
+.panel{background:var(--surface);border:1px solid var(--hair);border-radius:20px;padding:22px;box-shadow:var(--shadow);min-width:0}
+.panel.flush{padding:0;overflow:hidden}
+.stack{display:grid;gap:22px}
+.stack > * + *{border-top:1px solid var(--hair);padding-top:22px}
+.tile{width:40px;height:40px;flex:none;display:grid;place-items:center;border-radius:12px;background:var(--accent-bg);color:var(--accent);font-size:1.1875rem}
+.tile.ok{background:var(--ok-bg);color:var(--ok)} .tile.wait{background:var(--wait-bg);color:var(--wait)} .tile.bad{background:var(--bad-bg);color:var(--bad)}
+.tile.solid{background:var(--grad);color:#fff;box-shadow:var(--glow),inset 0 1px 0 rgba(255,255,255,.3)}
+.cardhead{display:flex;gap:12px;align-items:center;min-width:0}
+.cardhead p{margin-top:1px}
 
-/* topology: the one loud element */
-.map svg{width:100%;height:auto;display:block}
-.map .link{stroke:var(--line);stroke-width:5;stroke-linecap:round}
-.map .node circle{fill:var(--panel);stroke:var(--ink);stroke-width:2.5}
-.map .node text{font:700 15px var(--sans);fill:var(--ink);text-anchor:middle;dominant-baseline:central}
-.map .lan{font:12px var(--mono);fill:var(--soft);text-anchor:middle}
-.map .sub{font:11px var(--mono);fill:var(--soft);text-anchor:middle}
-.map .trace{fill:none;stroke-width:4;stroke-linecap:round}
-.map .trace.loop{stroke:var(--bad)} .map .trace.hole{stroke:var(--wait)} .map .trace.new{stroke:var(--cable)}
-.map .x{stroke:var(--wait);stroke-width:4;stroke-linecap:round}
-.legend{font-size:13px;color:var(--soft);min-height:20px}
-@media (prefers-reduced-motion:no-preference){.map .trace{stroke-dasharray:400;stroke-dashoffset:400;animation:draw .7s ease-out forwards}}
+/* top bar */
+.top{position:sticky;top:0;z-index:30;display:flex;gap:10px 14px;align-items:center;height:60px;padding:0 20px;border-width:0 0 1px;border-radius:0}
+.brand{display:flex;gap:10px;align-items:center;font-weight:650;letter-spacing:-.02em;font-size:1rem;white-space:nowrap}
+.brand .tile{width:32px;height:32px;border-radius:10px;font-size:1.125rem}
+.labpick{display:flex;gap:8px;align-items:center;font-size:.8125rem;color:var(--soft);padding-left:14px;border-left:1px solid var(--line);min-width:0}
+.labpick select{width:auto;max-width:42vw;height:34px;border-radius:10px;padding:0 32px 0 12px;background-color:var(--wash);border-color:transparent;font-weight:550;font-size:.875rem;color:var(--ink)}
+.health{margin-left:auto;font-size:.8125rem;font-weight:500;display:flex;gap:8px;align-items:center;height:34px;padding:0 12px 0 11px;
+  border-radius:10px;background:var(--wash);white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--faint);flex:none;transition:background .3s,box-shadow .3s}
+.dot.ok{background:var(--ok-solid);box-shadow:0 0 0 3px var(--ok-bg)} .dot.bad{background:var(--bad-solid);box-shadow:0 0 0 3px var(--bad-bg)}
+.icon{width:36px;height:36px;flex:none;display:grid;place-items:center;border:0;border-radius:11px;background:none;color:var(--soft);font-size:1.0625rem;
+  transition:transform .1s ease-out,background .15s,color .15s}
+.icon:hover{background:var(--wash);color:var(--ink)}
+.icon:active{transform:scale(.92)}
+.who{display:flex;gap:9px;align-items:center;font-size:.8125rem;font-weight:550;min-width:0}
+.avatar{width:32px;height:32px;flex:none;border-radius:50%;display:grid;place-items:center;background:var(--grad);color:#fff;font-weight:650;font-size:.8125rem;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}
+.badge{font-size:.6875rem;font-weight:600;letter-spacing:.02em;border-radius:7px;padding:2px 7px;background:var(--accent-bg);color:var(--accent);white-space:nowrap}
+
+/* floating navigation: a glass capsule at the left edge, a tab bar at the bottom on phones */
+.rail{position:fixed;z-index:25;left:16px;top:76px;width:76px;padding:8px;border-radius:26px;display:flex;flex-direction:column;gap:8px;
+  box-shadow:var(--lift),inset 0 1px 0 var(--glass-edge)}
+.tabs{position:relative;display:flex;flex-direction:column;gap:4px}
+.tabs button{position:relative;z-index:1;display:grid;justify-items:center;gap:4px;padding:10px 0 8px;border:0;background:none;border-radius:18px;
+  font-size:.6875rem;font-weight:550;letter-spacing:.005em;color:var(--soft);white-space:nowrap;transition:color .2s,transform .1s ease-out}
+.tabs button .i{font-size:1.3125rem}
+.tabs button:hover{color:var(--ink)}
+.tabs button:active{transform:scale(.94)}
+.tabs button[aria-selected="true"]{color:var(--accent)}
+.tabs .thumb{position:absolute;left:0;top:0;width:0;height:0;border-radius:18px;background:var(--accent-bg);will-change:transform}
+.tabs .count{position:absolute;top:2px;right:5px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;display:grid;place-items:center;
+  font-size:.625rem;font-weight:700;background:var(--wait-solid);color:#fff;box-shadow:0 0 0 2px var(--surface);font-variant-numeric:tabular-nums}
+.rail hr{border:0;border-top:1px solid var(--line);margin:0 12px}
+.rail .icon{align-self:center}
+#theme svg{transition:transform .5s cubic-bezier(.2,.8,.2,1)}
+:root[data-theme="dark"] #theme svg{transform:rotate(180deg)}
+
+.page{padding:24px 24px 72px 116px;max-width:1680px;margin:0 auto;display:grid;gap:20px}
+.pagehead{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px 24px;align-items:end}
+.pagehead p{margin-top:4px;font-size:.9375rem;max-width:62ch}
+.stats{display:grid;grid-template-columns:repeat(4,auto);gap:10px}
+.stat{display:flex;gap:10px;align-items:center;min-width:0;padding:9px 16px 9px 9px;border:1px solid var(--hair);border-radius:16px;background:var(--surface);
+  box-shadow:var(--shadow);text-align:left;transition:transform .1s ease-out,border-color .15s}
+button.stat:hover{border-color:var(--line)} button.stat:active{transform:scale(.97)}
+.stat .tile{width:36px;height:36px;border-radius:11px;font-size:1.0625rem}
+.stat > div{min-width:0}
+.stat span.k{display:block;font-size:.6875rem;font-weight:500;color:var(--soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat b{display:block;font-size:1.0625rem;font-weight:650;letter-spacing:-.02em;line-height:1.2;font-variant-numeric:tabular-nums;white-space:nowrap}
+.layout{display:grid;grid-template-columns:minmax(0,1.04fr) minmax(400px,1fr);gap:20px;align-items:start}
+.layout[data-view="history"],.layout[data-view="labs"]{grid-template-columns:minmax(0,1fr)}
+.layout[data-view="history"] .mapcol,.layout[data-view="labs"] .mapcol{display:none}
+.mapcol,main{display:flex;flex-direction:column;gap:16px;min-width:0}
+section{display:grid;gap:16px;align-content:start;min-width:0;scroll-margin-top:76px}
+@media (max-width:1280px){.pagehead{grid-template-columns:minmax(0,1fr)}.stats{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media (max-width:1080px){.layout{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:900px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:760px){
+  .page{padding:16px 16px 104px}
+  .top{padding:0 14px;gap:8px}
+  .brand span,.who span:not(.avatar),.labpick > span{display:none}
+  .labpick{padding-left:0;border:0;flex:1}
+  .labpick select{width:100%;max-width:none;text-overflow:ellipsis}
+  .health{padding:0 11px} .health #health-text{display:none}
+  .rail{left:50%;top:auto;bottom:max(12px,env(safe-area-inset-bottom));width:auto;translate:-50% 0;flex-direction:row;align-items:center;padding:6px;gap:4px}
+  .tabs{flex-direction:row;gap:2px}
+  .tabs button{width:66px;padding:8px 0 6px}
+  .rail hr{display:none}
+  h1{font-size:1.375rem}
+}
+
+/* map */
+.mapcard{display:grid;gap:16px;padding:18px}
+.mapcard:fullscreen{border-radius:0;border:0;display:flex;flex-direction:column}
+.mapcard:fullscreen .mapbox{flex:1;min-height:0} .mapcard:fullscreen .mapbox svg{height:100%}
+.tools{display:flex;gap:6px;margin-left:auto;flex:none}
+.tool{height:34px;min-width:34px;padding:0 9px;display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);border-radius:10px;
+  background:var(--surface);font-size:.8125rem;font-weight:550;color:var(--ink);transition:transform .1s ease-out,background .15s}
+.tool .i{font-size:1rem;color:var(--soft)}
+.tool:hover{background:var(--wash)} .tool:active{transform:scale(.94)}
+.tool.on{border-color:var(--accent-solid);color:var(--accent);background:var(--accent-bg)} .tool.on .i{color:inherit}
+.mapbox{position:relative;overflow:hidden;background-color:var(--well);border:1px solid var(--hair);border-radius:16px;
+  background-image:radial-gradient(var(--dot) 1px,transparent 1.2px);background-size:22px 22px}
+.mapbox svg{width:100%;height:min(54vh,520px);display:block;touch-action:none;cursor:grab}
+.mapbox svg:active{cursor:grabbing}
+.note{display:flex;gap:9px;align-items:flex-start;padding:10px 13px;border-radius:12px;background:var(--wash);font-size:.8125rem;color:var(--soft);line-height:1.4}
+.note .i{font-size:1rem;margin-top:1px}
+svg .link{stroke:var(--link);stroke-width:3;stroke-linecap:round}
+svg .link.bad{stroke:var(--bad-solid);stroke-dasharray:3 10}
+svg .tagbox{fill:var(--surface);stroke:var(--line);stroke-width:1}
+svg .tag{font:500 13px var(--mono);fill:var(--soft);text-anchor:middle;dominant-baseline:central;pointer-events:none}
+svg .tag.net{fill:var(--accent)}
+svg .node{cursor:pointer}
+svg .node .halo{fill:var(--accent-bg);transition:fill .2s}
+svg .node .disc{fill:var(--surface);stroke:var(--accent-solid);stroke-width:2;transform-box:fill-box;transform-origin:center;transition:stroke-width .15s}
+svg .node .glyph{fill:none;stroke:var(--accent-solid);stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+svg .node .name{font-weight:650;fill:var(--ink);text-anchor:middle;dominant-baseline:central;font-family:var(--sans);letter-spacing:-.02em;pointer-events:none}
+svg .node:hover .disc{stroke-width:3}
+svg .node.selected .disc{stroke-width:3.5;fill:var(--accent-fill)}
+svg .node.selected .halo{fill:color-mix(in srgb,var(--accent-solid) 22%,transparent)}
+svg .node.bad .disc{stroke:var(--bad-solid);fill:var(--bad-fill)} svg .node.bad .halo{fill:var(--bad-bg)} svg .node.bad .glyph{stroke:var(--bad-solid)}
+svg .node.lifted .disc{transform:scale(1.08);filter:drop-shadow(0 12px 16px rgba(0,0,0,.28))}
+svg .node:focus-visible{outline:none} svg .node:focus-visible .disc{stroke-width:4}
+svg .trace{fill:none;stroke-width:4;stroke-linecap:round}
+svg .trace.loop{stroke:var(--bad-solid)} svg .trace.hole{stroke:var(--wait-solid)} svg .trace.new{stroke:var(--ok-solid)} svg .trace.gone{stroke:var(--faint)}
+svg .trace.dashed{stroke-dasharray:6 8}
+svg .head.loop{fill:var(--bad-solid)} svg .head.hole{fill:var(--wait-solid)} svg .head.new{fill:var(--ok-solid)} svg .head.gone{fill:var(--faint)}
+svg .x{stroke:var(--wait-solid);stroke-width:4;stroke-linecap:round}
+@media (prefers-reduced-motion:no-preference){svg .trace:not(.dashed){stroke-dasharray:600;stroke-dashoffset:600;animation:draw .7s cubic-bezier(.2,.8,.2,1) forwards}}
 @keyframes draw{to{stroke-dashoffset:0}}
 
-.routes{display:flex;flex-direction:column;gap:10px}
-.routes div{display:grid;grid-template-columns:32px 1fr;gap:4px 8px}
-.routes b{font-weight:600}
-.routes code{color:var(--soft);display:block}
+.detail{display:grid;gap:16px}
+.blk{display:grid;gap:10px;min-width:0}
 table{border-collapse:collapse;width:100%}
-th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top;font-size:14px}
-th{font-weight:600;color:var(--soft)}
-.reach td,.reach th{text-align:center;padding:5px 4px;font-size:13px}
-.reach th:first-child,.reach td:first-child{text-align:left}
-.yes{color:var(--ok);font-weight:600} .no{color:var(--soft)}
+th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--hair);vertical-align:middle;font-size:.875rem}
+tbody tr:last-child td{border-bottom:0}
+th{font-weight:550;color:var(--soft);font-size:.75rem;letter-spacing:.01em;white-space:nowrap}
+.tablewrap{overflow-x:auto}
+.well{border:1px solid var(--hair);border-radius:14px;overflow:hidden;background:var(--well)}
+.well th,.well td{padding:8px 12px}
 
-.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line)}
-.tabs button{background:none;border:0;border-bottom:3px solid transparent;padding:8px 12px;cursor:pointer;color:var(--soft);font-weight:500}
-.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink)}
-.tabs .count{font-size:12px;background:var(--wait-bg);color:var(--wait);border-radius:10px;padding:1px 7px;margin-left:4px}
-[hidden]{display:none!important}
+/* reachability */
+.reachcard{padding:0}
+.reachcard summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px 12px;align-items:center;padding:18px;border-radius:20px}
+.reachcard summary::-webkit-details-marker{display:none}
+.reachcard .chev{font-size:1.125rem;color:var(--soft);transition:transform .25s cubic-bezier(.2,.8,.2,1)}
+.reachcard[open] .chev{transform:rotate(90deg)}
+.reachcard b.pct{font-size:1.25rem;font-weight:650;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.meter{grid-column:1/-1;height:8px;border-radius:4px;background:var(--wash);overflow:hidden}
+.meter span{display:block;height:100%;width:0;border-radius:4px;background:var(--grad);transition:width .6s cubic-bezier(.2,.8,.2,1)}
+.meter span.full{background:var(--ok-solid)}
+.reach-wrap{overflow:auto;max-height:320px;padding:0 18px 18px}
+.reach{border-collapse:separate;border-spacing:3px}
+.reach td,.reach th{text-align:center;padding:6px 8px;font-size:.75rem;white-space:nowrap;border:0;border-radius:8px}
+.reach th:first-child,.reach td:first-child{text-align:left;position:sticky;left:0;background:var(--surface)}
+.reach .yes{color:var(--ok);background:var(--ok-bg);font-weight:600} .reach .no{color:var(--bad);background:var(--bad-bg);font-weight:600} .reach .own{color:var(--faint);background:var(--wash)}
+pre.config,.joblog{background:var(--well);border:1px solid var(--hair);border-radius:12px;padding:12px 14px;margin:0;overflow:auto;line-height:1.6}
+pre.config{max-height:300px}
+.joblog{white-space:pre-wrap}
 
-form{display:grid;gap:14px;max-width:560px}
-.row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-@media (max-width:520px){.row{grid-template-columns:1fr}}
-label{display:grid;gap:4px;font-weight:500;font-size:14px}
-label small{color:var(--soft);font-weight:400}
-input,select{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:8px 10px;width:100%}
-input[type=radio]{width:auto}
-fieldset{border:0;padding:0;margin:0;display:flex;gap:16px;flex-wrap:wrap}
-fieldset legend{font-weight:500;font-size:14px;margin-bottom:4px;padding:0}
-fieldset label{display:flex;gap:6px;align-items:center;font-weight:400}
-.examples{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:14px;color:var(--soft)}
-.examples button{background:var(--wash);border:1px solid var(--line);border-radius:14px;padding:3px 10px;cursor:pointer;font-size:13px;color:var(--ink)}
-.btn{border-radius:6px;padding:9px 16px;font-weight:600;cursor:pointer;border:1px solid var(--ink);background:var(--ink);color:var(--bg)}
-.btn.ghost{background:transparent;color:var(--ink)}
-.btn.go{background:var(--ok);border-color:var(--ok);color:#fff}
-.btn:disabled{opacity:.55;cursor:wait}
-.actions{display:flex;gap:10px;flex-wrap:wrap}
-.err{color:var(--bad);font-size:14px}
+/* forms */
+form{display:grid;gap:16px}
+.row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+@media (max-width:560px){.row{grid-template-columns:minmax(0,1fr)}}
+label{display:grid;gap:7px;font-weight:550;font-size:.8125rem;min-width:0}
+.lab{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.lab .i{color:var(--accent);font-size:.9375rem}
+label small{color:var(--soft);font-weight:400;font-size:.75rem}
+input,select,textarea{background:var(--field);border:1px solid var(--line);border-radius:12px;height:44px;padding:0 13px;width:100%;font-size:.9375rem;
+  transition:border-color .15s,box-shadow .15s}
+input::placeholder{color:var(--faint)}
+input:hover,select:hover{border-color:color-mix(in srgb,var(--ink) 30%,transparent)}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent-solid);box-shadow:0 0 0 4px var(--accent-bg)}
+select{appearance:none;-webkit-appearance:none;padding-right:36px;background-repeat:no-repeat;background-position:right 13px center;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none' stroke='%238b93a5' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1.5 1.5 6 6l4.5-4.5'/%3E%3C/svg%3E")}
+input[type=range]{height:28px;padding:0;border:0;background:none;accent-color:var(--accent-solid);box-shadow:none}
+fieldset{border:0;padding:0;margin:0;min-width:0}
+/* switch */
+.check{display:flex;align-items:center;gap:11px;cursor:pointer}
+.check input{appearance:none;-webkit-appearance:none;width:40px;height:24px;flex:none;border:0;border-radius:12px;padding:0;margin:0;background:var(--line);position:relative;cursor:pointer;transition:background .2s}
+.check input::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .22s cubic-bezier(.2,.8,.2,1)}
+.check input:checked{background:var(--accent-solid)} .check input:checked::after{transform:translateX(16px)}
+/* kind of change: three large radio cards */
+.seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.seg label{position:relative;display:flex;align-items:center;justify-content:center;gap:8px;min-height:46px;padding:8px 10px;border:1px solid var(--line);border-radius:12px;
+  background:var(--field);color:var(--soft);text-align:center;cursor:pointer;transition:color .15s,background .15s,border-color .15s,transform .1s ease-out}
+.seg label .i{font-size:1.0625rem}
+.seg label:active{transform:scale(.98)}
+.seg label:has(:checked){border-color:var(--accent-solid);background:var(--accent-bg);color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent-solid)}
+.seg input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+.seg label:has(:focus-visible){outline:2px solid var(--accent-solid);outline-offset:2px}
+@media (max-width:520px){.seg{grid-template-columns:minmax(0,1fr)}}
+.chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:7px;height:32px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:0 12px;font-size:.8125rem;font-weight:550;color:var(--ink);
+  white-space:nowrap;transition:transform .1s ease-out,background .15s,border-color .15s,color .15s}
+.chip::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--faint)}
+.chip[data-kind="ok"]::before{background:var(--ok-solid)} .chip[data-kind="bad"]::before{background:var(--bad-solid)} .chip[data-kind="wait"]::before{background:var(--wait-solid)}
+.chip[data-kind="none"]::before{display:none}
+.chip b{font-weight:600;color:var(--soft);font-variant-numeric:tabular-nums}
+.chip:hover{background:var(--wash)}
+.chip:active{transform:scale(.95)}
+.chip[aria-pressed="true"]{border-color:var(--accent-solid);background:var(--accent-bg);color:var(--accent)} .chip[aria-pressed="true"] b{color:inherit}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:42px;border:0;border-radius:12px;padding:0 18px;font-size:.9375rem;font-weight:600;
+  background:var(--grad);color:#fff;white-space:nowrap;box-shadow:var(--glow),inset 0 1px 0 rgba(255,255,255,.28);transition:transform .1s ease-out,filter .15s,opacity .15s,background .15s}
+.btn .i{font-size:1.0625rem}
+.btn:hover{filter:brightness(1.08)}
+.btn:active{transform:scale(.97)}
+.btn.lg{height:46px;padding:0 22px}
+.btn.ghost{background:var(--surface);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
+.btn.ghost:hover{background:var(--wash);filter:none}
+.btn.danger{color:var(--bad)}
+.btn.go{background:linear-gradient(135deg,#1fb264,#12915a);box-shadow:0 8px 18px -8px rgba(22,160,90,.7),inset 0 1px 0 rgba(255,255,255,.28)}
+.btn.small{height:32px;padding:0 12px;font-size:.8125rem;border-radius:10px;gap:6px} .btn.small .i{font-size:.9375rem}
+.btn:disabled{opacity:.55;cursor:progress}
+.actions{display:flex;gap:8px 10px;flex-wrap:wrap;align-items:center}
+.err{color:var(--bad);font-size:.8125rem;font-weight:500}
+.err:empty{display:none}
 
-.verdict{border-left:5px solid var(--soft);padding:10px 14px;background:var(--panel);border-radius:0 6px 6px 0;display:grid;gap:4px}
-.verdict.ok{border-color:var(--ok)} .verdict.bad{border-color:var(--bad)} .verdict.wait{border-color:var(--wait)}
-.verdict h2{font-size:20px}
-.verdict p{color:var(--soft);overflow-wrap:anywhere}
-.checks{list-style:none;margin:0;padding:0;display:grid;gap:6px}
-.checks li{display:grid;grid-template-columns:62px 110px 1fr;gap:10px;align-items:baseline;font-size:14px}
-@media (max-width:520px){.checks li{grid-template-columns:62px 1fr}.checks li span:last-child{grid-column:1/-1}}
-.pill{font-size:12px;font-weight:600;border-radius:4px;padding:1px 0;text-align:center}
-.pill.pass{background:var(--ok-bg);color:var(--ok)} .pill.fail{background:var(--bad-bg);color:var(--bad)}
-.diff{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 0;margin:0;overflow-x:auto}
-.diff div{padding:1px 14px;white-space:pre}
+/* plain-language request: the main way in, so it gets the largest field on the page */
+.ask .bar{position:relative}
+.ask .bar > .i{position:absolute;left:16px;top:50%;translate:0 -50%;font-size:1.1875rem;color:var(--accent-2);pointer-events:none}
+.ask input{height:56px;font-size:1.0625rem;padding:0 150px 0 46px;border-radius:16px;box-shadow:0 1px 2px rgba(15,23,41,.05)}
+.ask .bar .btn{position:absolute;right:7px;top:7px;height:42px}
+@media (max-width:520px){.ask input{padding-right:13px}.ask .bar .btn{position:static;width:100%;margin-top:8px}.ask .bar > .i{top:28px}}
+.callout{padding:10px 13px;border-radius:12px;background:var(--wash);font-size:.8125rem;color:var(--soft);overflow-wrap:anywhere}
+.callout:empty,.understood:empty{display:none}
+.understood{display:grid;gap:10px}
+.card{border-radius:14px;padding:14px;display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 12px;align-items:center;background:var(--accent-bg);
+  border:1px solid color-mix(in srgb,var(--accent-solid) 30%,transparent)}
+.card .mono{display:block;overflow-wrap:anywhere;color:var(--soft);font-size:.75rem;margin-top:2px}
+.card .actions{grid-column:1/-1}
+.examples{display:grid;gap:10px}
+.examples .lab{flex-wrap:nowrap;align-items:flex-start} .examples .lab .i{margin-top:2px}
+
+/* the five stages every change goes through */
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr))}
+.steps li{position:relative;display:grid;justify-items:center;gap:6px;font-size:.75rem;font-weight:550;color:var(--soft);text-align:center;line-height:1.25}
+.steps li::before{content:"";position:absolute;top:12px;right:50%;width:100%;height:2px;background:var(--line)}
+.steps li:first-child::before{display:none}
+.steps .pip{position:relative;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--surface);box-shadow:inset 0 0 0 2px var(--line);
+  font-size:.75rem;font-weight:650;font-variant-numeric:tabular-nums}
+.steps .pip .i{font-size:.9375rem;stroke-width:2.5}
+.steps .done::before,.steps .now::before,.steps .fail::before{background:var(--accent-solid)}
+.steps .done .pip{background:var(--accent-solid);box-shadow:none;color:#fff}
+.steps .now{color:var(--ink)} .steps .now .pip{box-shadow:inset 0 0 0 2px var(--accent-solid),0 0 0 4px var(--accent-bg);color:var(--accent)}
+.steps .fail{color:var(--bad)} .steps .fail .pip{background:var(--bad-solid);box-shadow:none;color:#fff}
+.guide{display:grid;gap:14px}
+
+/* review */
+#review{display:grid;gap:24px}
+.tags{display:flex;flex-wrap:wrap;gap:6px}
+.tagline{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 9px;border-radius:8px;background:var(--wash);font-size:.75rem;font-weight:500;color:var(--soft);white-space:nowrap}
+.tagline .i{font-size:.875rem}
+.blank{display:grid;justify-items:center;gap:10px;text-align:center;padding:64px 24px;color:var(--soft)}
+.blank .tile{width:52px;height:52px;border-radius:16px;font-size:1.5rem}
+.blank b{color:var(--ink);font-size:1rem}
+.verdict{display:flex;gap:12px;align-items:flex-start;padding:15px 16px;border-radius:14px;background:var(--wash)}
+.verdict > .i{font-size:1.375rem;margin-top:1px}
+.verdict.ok{background:var(--ok-bg)} .verdict.bad{background:var(--bad-bg)} .verdict.wait{background:var(--wait-bg)}
+.verdict h2{font-size:1rem;letter-spacing:-.012em;line-height:1.3}
+.verdict.ok h2,.verdict.ok > .i{color:var(--ok)} .verdict.bad h2,.verdict.bad > .i{color:var(--bad)} .verdict.wait h2,.verdict.wait > .i{color:var(--wait)}
+.verdict p{overflow-wrap:anywhere;font-size:.8125rem;margin-top:3px}
+.sub{display:flex;align-items:center;gap:8px;justify-content:space-between}
+.checks{list-style:none;margin:0;padding:0;display:grid;border:1px solid var(--hair);border-radius:14px;overflow:hidden}
+.checks li{display:grid;grid-template-columns:20px 110px minmax(0,1fr);gap:10px;align-items:start;font-size:.8125rem;padding:10px 13px;border-bottom:1px solid var(--hair)}
+.checks li:last-child{border-bottom:0}
+.checks li .i{font-size:1.125rem;color:var(--ok-solid)} .checks li.fail .i{color:var(--bad-solid)} .checks li.fail{background:var(--bad-bg)}
+.checks li b{font-weight:600}
+.checks li span{color:var(--soft);overflow-wrap:anywhere}
+@media (max-width:560px){.checks li{grid-template-columns:20px minmax(0,1fr)}.checks li span{grid-column:2}}
+.diffbox{border:1px solid var(--hair);border-radius:14px;overflow:hidden}
+.diffhead{display:flex;align-items:center;gap:8px;padding:9px 13px;background:var(--wash);font-size:.8125rem;font-weight:600;border-bottom:1px solid var(--hair)}
+.diffhead .i{color:var(--accent)}
+.diff{margin:0;padding:8px 0;overflow:auto;line-height:1.7;background:var(--well)}
+.diff div{padding:0 14px;white-space:pre}
 .diff .add{background:var(--ok-bg);color:var(--ok)} .diff .del{background:var(--bad-bg);color:var(--bad)}
-.decide{display:grid;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px;max-width:620px}
-.trail{list-style:none;margin:0;padding:0;font-size:13px}
-.trail li{display:grid;grid-template-columns:96px 140px 90px 1fr;gap:8px;padding:4px 0;border-bottom:1px solid var(--line)}
-@media (max-width:640px){.trail li{grid-template-columns:80px 1fr}.trail li span:nth-child(n+3){grid-column:1/-1}}
-.trail .mono{color:var(--soft)}
-.status{font-weight:600;font-size:13px;white-space:nowrap}
-.s-SUCCESS{color:var(--ok)} .s-INVALID,.s-BLOCKED,.s-ROLLBACK_FAILED{color:var(--bad)}
-.s-REJECTED,.s-ROLLED_BACK,.s-PENDING_APPROVAL{color:var(--wait)}
-.history tr{cursor:pointer} .history tr:hover td{background:var(--wash)}
-.empty{color:var(--soft)}
-section{display:grid;gap:14px}
+.decide{border:1px solid color-mix(in srgb,var(--accent-solid) 35%,transparent);background:var(--accent-bg);border-radius:16px;padding:18px}
+.trail{list-style:none;margin:0;padding:0}
+.trail li{position:relative;display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:0 12px;padding-bottom:16px;font-size:.8125rem}
+.trail li::before{content:"";position:absolute;left:8px;top:16px;bottom:-2px;width:2px;border-radius:1px;background:var(--line)}
+.trail li:last-child{padding-bottom:0} .trail li:last-child::before{display:none}
+.trail .pt{width:10px;height:10px;border-radius:50%;margin:5px 4px 0;background:currentColor}
+.trail b{font-weight:600;margin-right:6px}
+.trail p{color:var(--soft);overflow-wrap:anywhere;margin-top:2px}
+.trail time{color:var(--faint);font-size:.75rem;white-space:nowrap}
+.status{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:8px;font-weight:600;font-size:.75rem;white-space:nowrap;
+  background:color-mix(in srgb,currentColor 13%,transparent)}
+.status::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.status.mini{height:20px;padding:0 7px;font-size:.6875rem} .status.mini::before{display:none}
+.s-SUCCESS,.s-PASS,.s-OK,.s-APPROVED,.s-ACCEPTED,.s-running{color:var(--ok)} .s-INVALID,.s-BLOCKED,.s-ROLLBACK_FAILED,.s-FAIL,.s-failed{color:var(--bad)}
+.s-REJECTED,.s-ROLLED_BACK,.s-PENDING_APPROVAL{color:var(--wait)} .s-stopped{color:var(--soft)}
+
+/* history */
+.tablebar{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--hair)}
+.search{display:block;position:relative;flex:0 1 280px}
+.search .i{position:absolute;left:12px;top:50%;translate:0 -50%;color:var(--faint);pointer-events:none}
+.search input{height:34px;padding-left:34px;border-radius:10px;font-size:.875rem}
+.history th:first-child,.history td:first-child{padding-left:18px} .history th:last-child,.history td:last-child{padding-right:18px}
+.history tr[data-id]{cursor:pointer;transition:background .12s} .history tr[data-id]:hover{background:var(--wash)}
+.history td.what{font-weight:550;width:60%}
+.history td.what small{display:block;font-weight:400;font-size:.8125rem;color:var(--soft);margin-top:1px}
+.history td.when{color:var(--soft);white-space:nowrap}
+.idtag{font-family:var(--mono);font-size:.75rem;padding:3px 7px;border-radius:7px;background:var(--wash);color:var(--soft)}
+
+/* labs */
+#view-labs{grid-template-columns:minmax(0,1fr) minmax(0,1.08fr);align-items:start;gap:20px}
+#view-labs > div{display:grid;gap:16px;min-width:0}
+@media (max-width:1080px){#view-labs{grid-template-columns:minmax(0,1fr)}}
+.lablist{display:grid;gap:10px}
+.labrow{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px 12px;align-items:center;padding:12px;border:1px solid var(--hair);border-radius:16px;background:var(--well)}
+.labrow.active{border-color:color-mix(in srgb,var(--accent-solid) 45%,transparent);background:var(--accent-bg)}
+.labrow h3{display:flex;align-items:center;gap:8px;font-size:.9375rem}
+.labrow .actions{grid-column:2/-1}
+.builder .mapbox svg{height:320px}
+.builder h3{display:flex;align-items:center;gap:7px}
+details.more summary{cursor:pointer;font-weight:600;font-size:.875rem;border-radius:8px}
+details.more .tablewrap{margin-top:10px}
+#people{display:grid;gap:16px}
+.drift{display:flex;gap:12px;align-items:flex-start;background:var(--wait-bg);border:1px solid color-mix(in srgb,var(--wait-solid) 35%,transparent);border-radius:18px;padding:16px 18px}
+.drift > .i{font-size:1.375rem;color:var(--wait);margin-top:1px}
+.drift > div{display:grid;gap:8px;min-width:0}
+.drift b{color:var(--wait)}
+.drift p{overflow-wrap:anywhere}
+
+/* sign in */
+.login{min-height:100vh;min-height:100dvh;display:grid;place-items:center;padding:16px}
+.login form{border-radius:28px;padding:36px 34px 28px;width:min(408px,100%);gap:16px;box-shadow:var(--lift),inset 0 1px 0 var(--glass-edge)}
+.login .tile{width:48px;height:48px;border-radius:15px;font-size:1.625rem}
+.login h1{margin-top:6px}
+.login .btn{margin-top:4px}
+.login .foot{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:6px;font-size:.75rem;color:var(--soft)}
+
+@media (prefers-reduced-transparency:reduce){.glass{background:var(--surface);-webkit-backdrop-filter:none;backdrop-filter:none}}
+@media (prefers-contrast:more){:root{--hair:var(--line)}.glass{background:var(--surface);-webkit-backdrop-filter:none;backdrop-filter:none;border-color:var(--ink)}}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
 </style>
 </head>
 <body>
-<header class="top">
-  <h1>Lab change review</h1>
-  <p>Every route change is checked against a model of the network, then waits for a person to approve it.</p>
-  <span class="health" id="health">Connecting to routers…</span>
-</header>
+<!-- icon sprite (Lucide outlines, ISC licence) -->
+<svg style="display:none" aria-hidden="true">
+  <symbol id="i-brand" viewBox="0 0 24 24"><path d="M10.9 7.3 6.4 16.2M13.1 7.3l4.5 8.9M7.8 18.5h8.4" opacity=".7"/><circle cx="12" cy="5.2" r="2.4" fill="currentColor"/><circle cx="5.2" cy="18.5" r="2.4" fill="currentColor"/><circle cx="18.8" cy="18.5" r="2.4" fill="currentColor"/></symbol>
+  <symbol id="i-network" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2.5"/><circle cx="5" cy="19" r="2.5"/><circle cx="19" cy="19" r="2.5"/><path d="M10.8 7.2 6.2 16.8M13.2 7.2l4.6 9.6M7.5 19h9"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.4 2.6a2.1 2.1 0 1 1 3 3L12 15l-4 1 1-4Z"/></symbol>
+  <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m8.5 12 2.5 2.5 4.5-5"/></symbol>
+  <symbol id="i-x-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+  <symbol id="i-flask" viewBox="0 0 24 24"><path d="M10 2v7.5a2 2 0 0 1-.2.9L4.7 20.6a1 1 0 0 0 .9 1.4h12.8a1 1 0 0 0 .9-1.4L14.2 10.4a2 2 0 0 1-.2-.9V2M8.5 2h7M7 16h10"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></symbol>
+  <symbol id="i-zoom-in" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3M11 8v6M8 11h6"/></symbol>
+  <symbol id="i-zoom-out" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3M8 11h6"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M9.9 15.5a2 2 0 0 0-1.4-1.4l-6.1-1.6a.5.5 0 0 1 0-1l6.1-1.6a2 2 0 0 0 1.4-1.4l1.6-6.1a.5.5 0 0 1 1 0l1.6 6.1a2 2 0 0 0 1.4 1.4l6.1 1.6a.5.5 0 0 1 0 1l-6.1 1.6a2 2 0 0 0-1.4 1.4l-1.6 6.1a.5.5 0 0 1-1 0zM20 3v4M22 5h-4M4 17v2M5 18H3"/></symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+  <symbol id="i-plus-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></symbol>
+  <symbol id="i-minus-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.8 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></symbol>
+  <symbol id="i-router" viewBox="0 0 24 24"><rect x="2" y="14" width="20" height="8" rx="2"/><path d="M6 18h.01M10 18h.01M15 10v4M17.8 7.2a4 4 0 0 0-5.6 0M20.7 4.3a8 8 0 0 0-11.4 0"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20"/></symbol>
+  <symbol id="i-hop" viewBox="0 0 24 24"><path d="m15 10 5 5-5 5"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/></symbol>
+  <symbol id="i-message" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.7 9a1 1 0 0 1-.6 0C7.5 20.500 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.500-1.200 6.200-2.700a1.200 1.200 0 0 1 1.600 0C14.500 3.800 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12.800 2.200a2 2 0 0 0-1.600 0L2.600 6.100a1 1 0 0 0 0 1.800l8.600 3.900a2 2 0 0 0 1.600 0l8.600-3.900a1 1 0 0 0 0-1.800Z"/><path d="m22 17.600-9.200 4.200a2 2 0 0 1-1.600 0L2 17.600M22 12.600l-9.200 4.200a2 2 0 0 1-1.600 0L2 12.600"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.900M16 3.100a4 4 0 0 1 0 7.800"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="m6 3 14 9-14 9z"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.700 18-8-14a2 2 0 0 0-3.500 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.700-3ZM12 9v4M12 17h.01"/></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></symbol>
+  <symbol id="i-activity" viewBox="0 0 24 24"><path d="M22 12h-2.500a2 2 0 0 0-1.900 1.500l-2.400 8.300a.250.250 0 0 1-.500 0L9.200 2.200a.250.250 0 0 0-.500 0l-2.300 8.300A2 2 0 0 1 4.500 12H2"/></symbol>
+  <symbol id="i-hourglass" viewBox="0 0 24 24"><path d="M5 22h14M5 2h14M17 22v-4.200a2 2 0 0 0-.600-1.400L12 12l-4.400 4.400a2 2 0 0 0-.600 1.400V22M7 2v4.200a2 2 0 0 0 .600 1.400L12 12l4.400-4.400a2 2 0 0 0 .600-1.400V2"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.500a5.500 5.500 0 0 1 0 11H11"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></symbol>
+</svg>
 
-<div class="layout">
-  <aside>
-    <div class="map">
-      <svg viewBox="0 0 360 290" role="img" aria-labelledby="map-title">
-        <title id="map-title">Triangle of routers R1, R2 and R3</title>
-        <defs>
-          <marker id="arrow-loop" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--bad)"/></marker>
-          <marker id="arrow-hole" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--wait)"/></marker>
-          <marker id="arrow-new" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--cable)"/></marker>
-        </defs>
-        <g id="links"></g>
-        <g id="traces"></g>
-        <g id="nodes"></g>
-      </svg>
-      <p class="legend" id="legend"></p>
-    </div>
-    <div>
-      <h3>Who can reach which LAN</h3>
-      <table class="reach" id="reach"></table>
-    </div>
-    <div>
-      <h3>Static routes on the routers now</h3>
-      <div class="routes" id="routes"></div>
-    </div>
-  </aside>
-
-  <main>
-    <nav class="tabs" role="tablist">
-      <button role="tab" id="tab-new" aria-selected="true" data-view="new">New change</button>
-      <button role="tab" id="tab-review" aria-selected="false" data-view="review">Review</button>
-      <button role="tab" id="tab-history" aria-selected="false" data-view="history">History<span class="count" id="pending-count" hidden></span></button>
-    </nav>
-
-    <section id="view-new" role="tabpanel">
-      <div class="examples" id="examples">Try an example:</div>
-      <form id="intent-form">
-        <fieldset>
-          <legend>What should change</legend>
-          <label><input type="radio" name="intent" value="ADD_ROUTE" checked> Add a route</label>
-          <label><input type="radio" name="intent" value="REMOVE_ROUTE"> Remove a route</label>
-        </fieldset>
-        <div class="row">
-          <label>Router <select name="router" id="f-router"></select></label>
-          <label>Destination network <input name="destination" placeholder="10.10.31.0/24" required></label>
-        </div>
-        <label id="nh-field">Next hop <small>an IP on a link to a neighbour, or the neighbour's name such as R3</small>
-          <input name="next_hop" placeholder="10.0.13.2 or R3"></label>
-        <div class="row">
-          <label>Requested by <input name="requested_by" placeholder="operator1" required></label>
-          <label>Reason <input name="reason" placeholder="Why this change is needed" required></label>
-        </div>
-        <div class="actions"><button class="btn" type="submit" id="validate-btn">Validate change</button></div>
-        <p class="err" id="form-err" role="alert"></p>
-      </form>
-    </section>
-
-    <section id="view-review" role="tabpanel" hidden>
-      <p class="empty" id="review-empty">Validate a change, or pick one from History, to review it here.</p>
-      <div id="review" hidden></div>
-    </section>
-
-    <section id="view-history" role="tabpanel" hidden>
-      <table class="history"><thead><tr><th>Change</th><th>Time</th><th>Request</th><th>Status</th></tr></thead><tbody id="history"></tbody></table>
-    </section>
-  </main>
+<div class="login" id="login" hidden>
+  <form id="login-form" class="glass">
+    <span class="tile solid"><svg class="i"><use href="#i-brand"/></svg></span>
+    <div><h1>Network change review</h1><p class="hint" style="margin-top:6px;font-size:.9375rem">Sign in to propose, approve or review changes.</p></div>
+    <label><span class="lab">User name</span><input name="name" autocomplete="username" required></label>
+    <label><span class="lab">Password</span><input name="password" type="password" autocomplete="current-password" required></label>
+    <button class="btn lg" type="submit">Sign in<svg class="i"><use href="#i-arrow"/></svg></button>
+    <p class="err" id="login-err" role="alert"></p>
+    <p class="foot"><svg class="i"><use href="#i-shield"/></svg>Every change is checked, approved by a second person, and logged.</p>
+  </form>
 </div>
 
-<script>
-const POS = {R1:[180,62], R2:[62,212], R3:[298,212]};
-const LAN_OFFSET = {R1:[0,-44], R2:[0,48], R3:[0,48]};
-const STATUS = {PENDING_APPROVAL:"Waiting for approval", SUCCESS:"Deployed", ROLLED_BACK:"Rolled back",
-  ROLLBACK_FAILED:"Rollback failed", BLOCKED:"Blocked", INVALID:"Invalid", REJECTED:"Rejected"};
-const EXAMPLES = [
-  ["Add a route", {intent:"ADD_ROUTE", router:"R1", destination:"10.10.31.0/24", next_hop:"R3", reason:"R1 users need the new R3 server LAN"}],
-  ["Remove a route", {intent:"REMOVE_ROUTE", router:"R1", destination:"10.10.30.128/25", reason:"legacy detour via R2 no longer needed"}],
-  ["Create a loop", {intent:"ADD_ROUTE", router:"R2", destination:"10.10.30.128/25", next_hop:"10.0.12.1", reason:"send upper R3 LAN via R1"}],
-  ["Create a blackhole", {intent:"ADD_ROUTE", router:"R1", destination:"10.10.40.0/24", next_hop:"10.0.12.2", reason:"route a network nobody has"}],
-  ["Conflicting route", {intent:"ADD_ROUTE", router:"R1", destination:"10.10.20.0/24", next_hop:"10.0.13.2", reason:"reach R2 LAN via R3 instead"}],
-  ["Command injection", {intent:"ADD_ROUTE", router:"R1", destination:"10.10.31.0/24; reboot", next_hop:"10.0.13.2", reason:"testing"}],
-];
-const $ = id => document.getElementById(id);
-const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const store = {get(k){try{return localStorage.getItem(k)}catch(e){return null}}, set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
-let NET = null, current = null, timer = null;
+<div id="app" hidden>
+<header class="top glass">
+  <div class="brand"><i class="tile solid"><svg class="i"><use href="#i-brand"/></svg></i><span>Network change review</span></div>
+  <label class="labpick"><span>Lab</span><select id="lab-select" aria-label="Active lab"></select></label>
+  <span class="health" id="health"><span class="dot" id="health-dot"></span><span id="health-text">Connecting…</span></span>
+  <span class="who"><span class="avatar" id="avatar" aria-hidden="true"></span><span id="whoami"></span><span class="badge" id="role"></span></span>
+  <button type="button" class="icon" id="signout" aria-label="Sign out" title="Sign out"><svg class="i"><use href="#i-logout"/></svg></button>
+</header>
 
-async function api(path, body){
-  const r = await fetch(path, body ? {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)} : {});
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.detail || `request failed (${r.status})`);
-  return data;
-}
-const svg = (tag, attrs) => { const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
-  for (const [k,v] of Object.entries(attrs)) el.setAttribute(k, v); return el; };
+<nav class="rail glass" aria-label="Sections">
+  <div class="tabs" role="tablist"><span class="thumb" id="tab-thumb"></span>
+    <button role="tab" aria-selected="true" data-view="change"><svg class="i"><use href="#i-edit"/></svg>New</button>
+    <button role="tab" aria-selected="false" data-view="review"><svg class="i"><use href="#i-check-circle"/></svg>Review</button>
+    <button role="tab" aria-selected="false" data-view="history"><svg class="i"><use href="#i-clock"/></svg>History<span class="count" id="pending-count" hidden></span></button>
+    <button role="tab" aria-selected="false" data-view="labs"><svg class="i"><use href="#i-flask"/></svg>Labs</button>
+  </div>
+  <hr>
+  <button type="button" class="icon" id="theme" aria-label="Switch between light and dark theme" title="Light / dark"><svg viewBox="0 0 16 16" width="17" height="17" aria-hidden="true"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.75a6.25 6.25 0 0 1 0 12.5z" fill="currentColor"/></svg></button>
+</nav>
 
-/* ---------- network map ---------- */
-function ownerOf(ip){ return Object.entries(NET.routers).find(([, r]) => r.addresses.includes(ip))?.[0]; }
+<div class="page">
+  <div class="pagehead">
+    <div><h1 id="page-title">New change</h1><p class="hint" id="page-sub"></p></div>
+    <div class="stats">
+      <div class="stat"><span class="tile"><svg class="i"><use href="#i-router"/></svg></span><div><span class="k">Routers</span><b id="st-routers">–</b></div></div>
+      <div class="stat"><span class="tile" id="st-links-tile"><svg class="i"><use href="#i-activity"/></svg></span><div><span class="k">Links up</span><b id="st-links">–</b></div></div>
+      <button type="button" class="stat" id="st-pending-btn" title="Open History"><span class="tile wait"><svg class="i"><use href="#i-hourglass"/></svg></span><div><span class="k">Awaiting approval</span><b id="st-pending">0</b></div></button>
+      <div class="stat"><span class="tile ok" id="st-audit-tile"><svg class="i"><use href="#i-shield"/></svg></span><div><span class="k">Audit log</span><b id="st-audit">–</b></div></div>
+    </div>
+  </div>
+  <div class="drift" id="drift" hidden role="alert"></div>
 
-function drawMap(){
-  const links = $("links"), nodes = $("nodes"); links.replaceChildren(); nodes.replaceChildren();
-  const names = Object.keys(NET.routers);
-  names.forEach((a, i) => names.slice(i + 1).forEach(b => {
-    const shared = NET.routers[a].connected.find(n => NET.routers[b].connected.includes(n));
-    if (!shared) return;
-    const [x1,y1] = POS[a], [x2,y2] = POS[b];
-    links.append(svg("line", {class:"link", x1, y1, x2, y2}));
-    const t = svg("text", {class:"sub", x:(x1+x2)/2 + (y1===y2 ? 0 : (x1+x2)/2 < 180 ? -36 : 36), y:(y1+y2)/2 + (y1===y2 ? 18 : 0)});
-    t.textContent = shared; links.append(t);
-  }));
-  names.forEach(n => {
-    const [x,y] = POS[n], g = svg("g", {class:"node"});
-    g.append(svg("circle", {cx:x, cy:y, r:24}));
-    const t = svg("text", {x, y}); t.textContent = n; g.append(t);
-    const lans = NET.routers[n].connected.filter(c => c.startsWith("10.10."));
-    lans.forEach((l, i) => { const lt = svg("text", {class:"lan", x:x + LAN_OFFSET[n][0], y:y + LAN_OFFSET[n][1] + i*15}); lt.textContent = l; g.append(lt); });
-    nodes.append(g);
-  });
-}
+  <div class="layout" id="layout" data-view="change">
+    <div class="mapcol">
+      <div class="panel mapcard" id="mapcard">
+        <div class="cardhead">
+          <span class="tile"><svg class="i"><use href="#i-network"/></svg></span>
+          <div class="grow"><h2>Network map</h2><p class="hint" id="map-sub">Loading…</p></div>
+          <div class="tools">
+            <button type="button" class="tool on" id="save-layout" hidden><svg class="i"><use href="#i-save"/></svg>Save layout</button>
+            <button type="button" class="tool" id="full" aria-label="Full screen" title="Full screen"><svg class="i"><use href="#i-expand"/></svg></button>
+            <button type="button" class="tool" id="zoom-in" aria-label="Zoom in" title="Zoom in"><svg class="i"><use href="#i-zoom-in"/></svg></button>
+            <button type="button" class="tool" id="zoom-out" aria-label="Zoom out" title="Zoom out"><svg class="i"><use href="#i-zoom-out"/></svg></button>
+            <button type="button" class="tool" id="fit" title="Show the whole network">Fit</button>
+          </div>
+        </div>
+        <div class="mapbox"><svg id="map" role="img" aria-label="Network map"></svg></div>
+        <p class="note"><svg class="i"><use href="#i-info"/></svg><span id="legend"></span></p>
+      </div>
+      <div class="detail panel" id="router-detail" hidden></div>
+      <details id="reach-box" class="panel reachcard">
+        <summary><svg class="i chev"><use href="#i-chevron"/></svg>
+          <div><h2>Reachability</h2><p class="hint" id="reach-summary">Which router can reach which LAN</p></div>
+          <b class="pct" id="reach-pct"></b>
+          <div class="meter" aria-hidden="true"><span id="reach-bar"></span></div></summary>
+        <div class="reach-wrap"><table class="reach" id="reach"></table></div>
+      </details>
+    </div>
 
-function drawTrace(path, kind){
-  const g = $("traces");
-  for (let i = 0; i < path.length - 1; i++){
-    const [x1,y1] = POS[path[i]], [x2,y2] = POS[path[i+1]];
-    const dx = x2-x1, dy = y2-y1, len = Math.hypot(dx,dy), nx = -dy/len*7, ny = dx/len*7, cut = 30/len;
-    g.append(svg("line", {class:`trace ${kind}`, x1:x1+dx*cut+nx, y1:y1+dy*cut+ny, x2:x2-dx*cut+nx, y2:y2-dy*cut+ny,
-      "marker-end":`url(#arrow-${kind})`, style:`animation-delay:${i*.25}s`}));
-  }
-  if (kind === "hole"){ const [x,y] = POS[path[path.length-1]];
-    g.append(svg("path", {class:"x", d:`M${x+20} ${y-38}l14 14m0 -14l-14 14`})); }
-}
+    <main>
+      <section id="view-change" role="tabpanel">
+        <div class="panel stack">
+          <form class="ask" id="ask-form">
+            <div class="cardhead"><span class="tile solid"><svg class="i"><use href="#i-sparkles"/></svg></span>
+              <div><h2>Describe the change</h2><p class="hint">Type an instruction in English, Hindi or Hinglish. It is only translated here, never deployed.</p></div></div>
+            <div class="bar"><svg class="i"><use href="#i-sparkles"/></svg><input id="ask-text" aria-label="Describe the change" autocomplete="off">
+              <button class="btn" type="submit" id="ask-btn">Understand</button></div>
+            <p class="callout" id="ask-hint"></p>
+            <div class="understood" id="understood"></div>
+          </form>
+          <div class="examples"><span class="lab hint"><svg class="i"><use href="#i-zap"/></svg>Try an example. Green ones pass, red ones are caught by the checks.</span>
+            <div class="chips" id="examples"></div></div>
+          <form id="intent-form">
+            <div class="cardhead"><span class="tile"><svg class="i"><use href="#i-list"/></svg></span>
+              <div><h2>Or fill in the change</h2><p class="hint">Pick the exact router, network and next hop.</p></div></div>
+            <fieldset><legend class="sr">Kind of change</legend>
+              <div class="seg">
+                <label><input type="radio" name="intent" value="ADD_ROUTE" checked><svg class="i"><use href="#i-plus-circle"/></svg>Add a route</label>
+                <label><input type="radio" name="intent" value="REMOVE_ROUTE"><svg class="i"><use href="#i-minus-circle"/></svg>Remove a route</label>
+                <label><input type="radio" name="intent" value="CONNECT"><svg class="i"><use href="#i-link"/></svg>Connect two routers</label>
+              </div>
+            </fieldset>
+            <div class="row" data-for="route">
+              <label><span class="lab"><svg class="i"><use href="#i-router"/></svg>Router</span><select name="router"></select></label>
+              <label><span class="lab"><svg class="i"><use href="#i-globe"/></svg>Destination network</span><input name="destination" list="lan-list" placeholder="a prefix such as 10.10.3.0/24"></label>
+            </div>
+            <label data-for="add"><span class="lab"><svg class="i"><use href="#i-hop"/></svg>Next hop <small>a neighbour of the router</small></span><select name="next_hop"></select></label>
+            <div class="row" data-for="connect">
+              <label><span class="lab"><svg class="i"><use href="#i-router"/></svg>From</span><select name="source"></select></label>
+              <label><span class="lab"><svg class="i"><use href="#i-globe"/></svg>To <small>a router, or a prefix inside the lab</small></span><input name="target" list="target-list"></label>
+            </div>
+            <label data-for="connect" class="check"><input type="checkbox" name="both_ways" checked><span>Both directions <small>needed for ping to work</small></span></label>
+            <label><span class="lab"><svg class="i"><use href="#i-message"/></svg>Reason</span><input name="reason" placeholder="Why this change is needed" required></label>
+            <div class="actions"><button class="btn lg" type="submit" id="validate-btn"><svg class="i"><use href="#i-check"/></svg>Validate change</button>
+              <span class="hint">Runs the safety checks. Nothing is deployed yet.</span></div>
+            <p class="err" id="form-err" role="alert"></p>
+          </form>
+          <div class="guide"><span class="hint">What happens to every change</span><div id="guide"></div></div>
+        </div>
+        <datalist id="lan-list"></datalist><datalist id="target-list"></datalist>
+      </section>
 
-function showOnMap(c){
-  $("traces").replaceChildren(); $("legend").textContent = "";
-  if (!c) return;
-  const failed = (c.report || []).find(r => !r.ok && (r.check === "loop" || r.check === "blackhole"));
-  const m = failed && failed.detail.match(/R\d(?: → R\d)+/);
-  if (m){
-    drawTrace(m[0].split(" → "), failed.check === "loop" ? "loop" : "hole");
-    $("legend").textContent = failed.check === "loop" ? `Traffic would circle forever: ${m[0]}` : `Traffic would be dropped: ${m[0]}, then nowhere`;
-    return;
-  }
-  const n = c.normalized;
-  if (n && n.next_hop && ownerOf(n.next_hop)){
-    drawTrace([n.router, ownerOf(n.next_hop)], "new");
-    $("legend").textContent = `${n.router} sends ${n.destination} to ${ownerOf(n.next_hop)}`;
-  }
-}
+      <section id="view-review" role="tabpanel" hidden>
+        <div class="panel blank" id="review-empty"><span class="tile"><svg class="i"><use href="#i-check-circle"/></svg></span>
+          <b>Nothing to review yet</b><p>Validate a change, or pick one from History, and it opens here.</p></div>
+        <div id="review" class="panel" hidden></div>
+      </section>
 
-function drawTables(){
-  const lans = [...new Set(NET.reachability.map(x => x.dst))].sort((x, y) => x.localeCompare(y, undefined, {numeric:true}));
-  const by = Object.fromEntries(NET.reachability.map(x => [x.src + x.dst, x]));
-  $("reach").innerHTML = `<thead><tr><th>From</th>${lans.map(l => `<th>${esc(l.replace("10.10.","…"))}</th>`).join("")}</tr></thead><tbody>` +
-    Object.keys(NET.routers).map(s => `<tr><td><b>${s}</b></td>${lans.map(l => { const x = by[s+l];
-      if (!x) return `<td class="no" title="own LAN">·</td>`;
-      return x.outcome === "DELIVERED" ? `<td class="yes" title="${esc(x.path.join(" → "))}">yes</td>`
-        : `<td class="no" title="${esc(x.outcome)}">no</td>`; }).join("")}</tr>`).join("") + "</tbody>";
-  $("routes").innerHTML = Object.entries(NET.routers).map(([n, r]) => `<div><b>${n}</b><span>${
-    r.static.map(([p, nh]) => `<code>${esc(p)} via ${esc(nh)}</code>`).join("") || '<code>no static routes</code>'}</span></div>`).join("");
-}
+      <section id="view-history" role="tabpanel" hidden>
+        <div class="panel flush">
+          <div class="tablebar">
+            <div class="chips" id="h-filters" role="group" aria-label="Filter by status"></div>
+            <label class="search"><svg class="i"><use href="#i-search"/></svg><input type="search" id="h-search" placeholder="Search changes" aria-label="Search changes"></label>
+          </div>
+          <div class="tablewrap"><table class="history"><thead><tr><th>Change</th><th>Request</th><th>Time</th><th>Status</th></tr></thead>
+            <tbody id="history"></tbody></table></div>
+        </div>
+      </section>
 
-async function refreshNetwork(){
-  try {
-    NET = await api("/api/routers");
-    drawMap(); drawTables(); showOnMap(current);
-    const audit = await api("/api/audit/verify");
-    $("health").textContent = `3 routers reachable · audit log ${audit.intact ? "intact" : "TAMPERED"}`;
-  } catch(e){ $("health").textContent = `Routers unreachable: ${e.message}`; }
-}
-
-/* ---------- tabs ---------- */
-function show(view){
-  document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.view === view)));
-  ["new","review","history"].forEach(v => $("view-" + v).hidden = v !== view);
-  if (view === "history") loadHistory();
-}
-document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => show(b.dataset.view)));
-
-/* ---------- new change ---------- */
-const form = $("intent-form");
-function syncNextHop(){ $("nh-field").hidden = form.intent.value === "REMOVE_ROUTE"; }
-form.addEventListener("change", syncNextHop);
-EXAMPLES.forEach(([label, ex]) => { const b = document.createElement("button"); b.type = "button"; b.textContent = label;
-  b.onclick = () => { for (const k of ["destination","next_hop","reason"]) form[k].value = ex[k] || "";
-    form.intent.value = ex.intent; form.router.value = ex.router; syncNextHop(); }; $("examples").append(b); });
-
-form.addEventListener("submit", async e => {
-  e.preventDefault(); $("form-err").textContent = "";
-  const f = Object.fromEntries(new FormData(form));
-  const raw = {intent:f.intent, router:f.router, destination:f.destination.trim(), requested_by:f.requested_by.trim(), reason:f.reason.trim()};
-  if (f.intent === "ADD_ROUTE") raw.next_hop = f.next_hop.trim();
-  store.set("nma-requester", raw.requested_by);
-  $("validate-btn").disabled = true; $("validate-btn").textContent = "Checking against the network model…";
-  try { openChange(await api("/api/intent", raw)); }
-  catch(err){ $("form-err").textContent = err.message; }
-  $("validate-btn").disabled = false; $("validate-btn").textContent = "Validate change";
-});
-
-/* ---------- review ---------- */
-function verdict(c){
-  const kind = c.status === "SUCCESS" ? "ok" : c.status === "PENDING_APPROVAL" ? "wait" : ["REJECTED","ROLLED_BACK"].includes(c.status) ? "wait" : "bad";
-  const title = {PENDING_APPROVAL:"All checks passed. Approve or reject this change.", SUCCESS:"Deployed and verified on the routers.",
-    ROLLED_BACK:"Deployment failed, so every router was restored from its snapshot.", ROLLBACK_FAILED:"Deployment failed and the rollback did not fully succeed. Check the routers now.",
-    BLOCKED:"Blocked before it reached any router.", INVALID:"The request is not valid.", REJECTED:"Rejected. Nothing was changed on the routers."}[c.status] || c.status;
-  return `<div class="verdict ${kind}"><h2>${esc(title)}</h2><p>${esc(c.reason)}</p></div>`;
-}
-
-function describe(c){
-  const n = c.normalized || c.intent || {};
-  return n.intent === "REMOVE_ROUTE" ? `Remove route to ${n.destination} on ${n.router}` : `On ${n.router}, send ${n.destination} via ${n.next_hop}`;
-}
-
-async function openChange(c){
-  current = c; clearInterval(timer);
-  const full = await api(`/api/changes/${c.id}`).catch(() => c);
-  current = full; show("review"); showOnMap(full);
-  const pending = full.status === "PENDING_APPROVAL";
-  $("review-empty").hidden = true; const box = $("review"); box.hidden = false;
-  box.innerHTML = `
-    <section>
-      <div><h3>${esc(describe(full))}</h3><p class="empty">Change ${esc(full.id)} · requested by ${esc((full.intent||{}).requested_by)} · ${esc((full.intent||{}).reason)}</p></div>
-      ${verdict(full)}
-      ${(full.report||[]).length ? `<div><h3>Checks in the network model</h3><ul class="checks">${full.report.map(r =>
-        `<li><span class="pill ${r.ok?"pass":"fail"}">${r.ok?"Pass":"Fail"}</span><span>${esc(r.check)}</span><span>${esc(r.detail)}</span></li>`).join("")}</ul></div>` : ""}
-      ${Object.entries(full.diff||{}).map(([r, lines]) => `<div><h3>Config change on ${esc(r)}</h3><pre class="diff">${lines.map(l =>
-        `<div class="${l[0]==="+"?"add":l[0]==="-"?"del":""}">${esc(l)}</div>`).join("")}</pre></div>`).join("")}
-      ${pending ? `<form class="decide" id="decide">
-        <h3>Your decision <span class="empty" id="countdown"></span></h3>
-        <div class="row"><label>Your name <input name="approver" required value="${esc(store.get("nma-approver")||"")}"></label>
-          <label>Reason <input name="reason" placeholder="Optional"></label></div>
-        <label>Failure test <small>forces a failure after approval so you can watch the rollback</small>
-          <select name="simulate_failure"><option value="">Off, deploy normally</option>
-          <option value="deploy">R3 rejects its config mid-deploy</option><option value="health">A link goes down after deploy</option></select></label>
-        <div class="actions"><button class="btn go" type="submit" value="approve">Approve and deploy</button>
-          <button class="btn ghost" type="submit" value="reject">Reject</button></div>
-        <p class="err" id="decide-err" role="alert"></p></form>` : ""}
-      <div><h3>Audit trail</h3><ul class="trail">${(full.events||[]).map(e => `<li><span class="mono">${esc(new Date(e.ts).toLocaleTimeString())}</span>
-        <span>${esc(e.stage)}</span><span class="status s-${e.result==="PASS"||e.result==="OK"||e.result==="APPROVED"?"SUCCESS":esc(e.result)}">${esc(e.result)}</span><span>${esc(e.detail)}</span></li>`).join("")}</ul></div>
-    </section>`;
-  if (pending){
-    const tick = () => { const s = Math.max(0, Math.round(full.expires_at - Date.now()/1000));
-      $("countdown") && ($("countdown").textContent = `auto-rejects in ${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`);
-      if (s === 0){ clearInterval(timer); openChange(full); } };
-    tick(); timer = setInterval(tick, 1000);
-    $("decide").addEventListener("submit", decide);
-  }
-  loadHistory();
-}
-
-async function decide(e){
-  e.preventDefault();
-  const action = e.submitter.value, f = Object.fromEntries(new FormData(e.target));
-  store.set("nma-approver", f.approver);
-  e.target.querySelectorAll("button").forEach(b => b.disabled = true);
-  e.submitter.textContent = action === "approve" ? "Backing up, deploying, checking pings…" : "Rejecting…";
-  try {
-    const c = await api(`/api/changes/${current.id}/${action}`, {approver:f.approver, reason:f.reason, simulate_failure:f.simulate_failure || null});
-    await refreshNetwork(); openChange(c);
-  } catch(err){
-    $("decide-err").textContent = err.message;
-    e.target.querySelectorAll("button").forEach(b => b.disabled = false);
-    e.submitter.textContent = action === "approve" ? "Approve and deploy" : "Reject";
-  }
-}
-
-/* ---------- history ---------- */
-async function loadHistory(){
-  const list = await api("/api/changes").catch(() => []);
-  const pending = list.filter(c => c.status === "PENDING_APPROVAL").length;
-  $("pending-count").hidden = !pending; $("pending-count").textContent = pending;
-  $("history").innerHTML = list.length ? list.map(c => `<tr data-id="${esc(c.id)}"><td class="mono">${esc(c.id)}</td>
-    <td>${new Date(c.created_at*1000).toLocaleTimeString()}</td><td>${esc(describe(c))}</td>
-    <td class="status s-${esc(c.status)}">${esc(STATUS[c.status]||c.status)}</td></tr>`).join("")
-    : `<tr><td colspan="4" class="empty">No changes yet. Start with New change.</td></tr>`;
-  $("history").querySelectorAll("tr[data-id]").forEach(tr => tr.onclick = () => openChange({id:tr.dataset.id}));
-}
-
-/* ---------- start ---------- */
-(async () => {
-  form.requested_by.value = store.get("nma-requester") || "";
-  await refreshNetwork();
-  if (NET) $("f-router").innerHTML = Object.keys(NET.routers).map(n => `<option>${n}</option>`).join("");
-  loadHistory();
-})();
-</script>
+      <section id="view-labs" role="tabpanel" hidden>
+        <div>
+          <div class="panel" style="display:grid;gap:16px">
+            <div class="cardhead"><span class="tile"><svg class="i"><use href="#i-layers"/></svg></span>
+              <div><h2>Saved labs</h2><p class="hint">One lab runs at a time. Starting a lab stops the one that is running.</p></div></div>
+            <div class="lablist" id="lab-list"></div>
+            <pre class="joblog" id="job-log" hidden></pre>
+          </div>
+          <div id="people" class="panel" hidden>
+            <div class="cardhead"><span class="tile"><svg class="i"><use href="#i-users"/></svg></span>
+              <div><h2>People</h2><p class="hint">Operators request changes. Approvers and admins decide on them.</p></div></div>
+            <div class="well tablewrap"><table><thead><tr><th>User</th><th>Role</th></tr></thead><tbody id="user-list"></tbody></table></div>
+            <form id="user-form">
+              <div class="row">
+                <label><span class="lab">New user</span><input name="name" required pattern="[A-Za-z0-9_.-]{1,32}"></label>
+                <label><span class="lab">Role</span><select name="role"><option>operator</option><option>approver</option><option>admin</option></select></label>
+              </div>
+              <label><span class="lab">Password <small>at least 10 characters</small></span><input name="password" type="password" minlength="10" required autocomplete="new-password"></label>
+              <div class="actions"><button class="btn ghost" type="submit"><svg class="i"><use href="#i-plus"/></svg>Add user</button></div>
+              <p class="err" id="user-err" role="alert"></p>
+            </form>
+          </div>
+        </div>
+        <form class="builder panel" id="builder">
+          <div class="cardhead"><span class="tile solid"><svg class="i"><use href="#i-plus"/></svg></span>
+            <div><h2>New lab</h2><p class="hint">Pick a shape and a size. Addresses and starting routes are worked out for you.</p></div></div>
+          <div class="row">
+            <label><span class="lab">Name <small>lowercase, digits, dashes</small></span><input name="name" required pattern="[a-z0-9][a-z0-9-]{0,30}" placeholder="ring8"></label>
+            <label><span class="lab">Shape</span><select name="template" id="b-template"></select></label>
+          </div>
+          <div class="row">
+            <label id="b-count"><span class="lab">Routers <span class="badge"><output id="b-count-out">6</output></span></span><input type="range" name="routers" min="2" max="30" value="6"></label>
+            <label><span class="lab">Starting routes</span><select name="baseline">
+              <option value="shortest-path">Every LAN reaches every LAN</option>
+              <option value="none">No routes yet (build them with intents)</option></select></label>
+          </div>
+          <p class="hint" id="b-hint"></p>
+          <div class="actions" id="draw-tools" hidden>
+            <button type="button" class="btn ghost small" id="add-router"><svg class="i"><use href="#i-plus"/></svg>Add router</button>
+            <button type="button" class="btn ghost small danger" id="del-router"><svg class="i"><use href="#i-trash"/></svg>Delete selected</button>
+            <span class="hint">Click one router, then another, to link or unlink them.</span>
+          </div>
+          <div class="mapbox"><svg id="preview" role="img" aria-label="Preview of the new lab"></svg></div>
+          <details class="more"><summary>Addresses the agent will use</summary><div class="well tablewrap" id="b-addresses"></div></details>
+          <div class="actions"><button class="btn lg" type="submit" id="create-btn"><svg class="i"><use href="#i-play"/></svg>Create and deploy</button></div>
+          <p class="err" id="b-err" role="alert"></p>
+        </form>
+      </section>
+    </main>
+  </div>
+</div>
+</div>
+<script src="/static/vendor/motion.js"></script>
+<script type="module" src="/static/app.js"></script>
 </body>
 </html>

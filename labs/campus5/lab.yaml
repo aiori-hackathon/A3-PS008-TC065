@@ -1,0 +1,16 @@
+routers: [R1, R2, R3, R4, R5]
+links:
+- [R1, R2]
+- [R2, R3]
+- [R3, R4]
+- [R4, R5]
+- [R5, R1]
+layout:
+  R1: [500, 148]
+  R2: [675, 249]
+  R3: [675, 451]
+  R4: [60, 217]
+  R5: [60, 60]
+name: campus5
+template: custom
+baseline: none

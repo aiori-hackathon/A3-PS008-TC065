@@ -3,6 +3,16 @@
     "AddRoute": {
       "additionalProperties": false,
       "properties": {
+        "requested_by": {
+          "pattern": "^[A-Za-z0-9_.-]{1,32}$",
+          "title": "Requested By",
+          "type": "string"
+        },
+        "reason": {
+          "pattern": "^[A-Za-z0-9 _.,:/()'?!-]{1,200}$",
+          "title": "Reason",
+          "type": "string"
+        },
         "router": {
           "description": "Target router, e.g. R1",
           "title": "Router",
@@ -12,16 +22,6 @@
           "description": "Destination prefix in CIDR, e.g. 10.10.30.0/24",
           "format": "ipv4network",
           "title": "Destination",
-          "type": "string"
-        },
-        "requested_by": {
-          "pattern": "^[A-Za-z0-9_.-]{1,32}$",
-          "title": "Requested By",
-          "type": "string"
-        },
-        "reason": {
-          "pattern": "^[A-Za-z0-9 _.,:/()'?!-]{1,200}$",
-          "title": "Reason",
           "type": "string"
         },
         "intent": {
@@ -37,30 +37,19 @@
         }
       },
       "required": [
-        "router",
-        "destination",
         "requested_by",
         "reason",
+        "router",
+        "destination",
         "intent",
         "next_hop"
       ],
       "title": "AddRoute",
       "type": "object"
     },
-    "RemoveRoute": {
+    "Connect": {
       "additionalProperties": false,
       "properties": {
-        "router": {
-          "description": "Target router, e.g. R1",
-          "title": "Router",
-          "type": "string"
-        },
-        "destination": {
-          "description": "Destination prefix in CIDR, e.g. 10.10.30.0/24",
-          "format": "ipv4network",
-          "title": "Destination",
-          "type": "string"
-        },
         "requested_by": {
           "pattern": "^[A-Za-z0-9_.-]{1,32}$",
           "title": "Requested By",
@@ -72,16 +61,72 @@
           "type": "string"
         },
         "intent": {
+          "const": "CONNECT",
+          "title": "Intent",
+          "type": "string"
+        },
+        "source": {
+          "description": "Router that must be able to reach the destination, e.g. R1",
+          "title": "Source",
+          "type": "string"
+        },
+        "destination": {
+          "description": "A router name (all of its LANs) or a prefix inside the lab, e.g. R5 or 10.10.5.0/24",
+          "title": "Destination",
+          "type": "string"
+        },
+        "both_ways": {
+          "default": true,
+          "description": "Also make the destination reach the source's LANs (needed for ping)",
+          "title": "Both Ways",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "requested_by",
+        "reason",
+        "intent",
+        "source",
+        "destination"
+      ],
+      "title": "Connect",
+      "type": "object"
+    },
+    "RemoveRoute": {
+      "additionalProperties": false,
+      "properties": {
+        "requested_by": {
+          "pattern": "^[A-Za-z0-9_.-]{1,32}$",
+          "title": "Requested By",
+          "type": "string"
+        },
+        "reason": {
+          "pattern": "^[A-Za-z0-9 _.,:/()'?!-]{1,200}$",
+          "title": "Reason",
+          "type": "string"
+        },
+        "router": {
+          "description": "Target router, e.g. R1",
+          "title": "Router",
+          "type": "string"
+        },
+        "destination": {
+          "description": "Destination prefix in CIDR, e.g. 10.10.30.0/24",
+          "format": "ipv4network",
+          "title": "Destination",
+          "type": "string"
+        },
+        "intent": {
           "const": "REMOVE_ROUTE",
           "title": "Intent",
           "type": "string"
         }
       },
       "required": [
-        "router",
-        "destination",
         "requested_by",
         "reason",
+        "router",
+        "destination",
         "intent"
       ],
       "title": "RemoveRoute",
@@ -91,6 +136,7 @@
   "discriminator": {
     "mapping": {
       "ADD_ROUTE": "#/$defs/AddRoute",
+      "CONNECT": "#/$defs/Connect",
       "REMOVE_ROUTE": "#/$defs/RemoveRoute"
     },
     "propertyName": "intent"
@@ -101,6 +147,9 @@
     },
     {
       "$ref": "#/$defs/RemoveRoute"
+    },
+    {
+      "$ref": "#/$defs/Connect"
     }
   ]
 }

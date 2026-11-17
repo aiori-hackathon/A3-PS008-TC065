@@ -8,57 +8,80 @@ import re
 import threading
 import time
 import uuid
-from ipaddress import IPv4Network
 
 from pydantic import ValidationError
 
-from backend import checks, deploy, generator, net, schema, twin
+from backend import checks, deploy, generator, labgen, schema, twin
+from backend.topology import LABS, ROOT, from_json, net_of, to_json
 from backend.audit import Audit
 from backend.lab import LabError
 
 
 
 class Engine:
-    def __init__(self, lab, db_path, snap_dir, timeout=300):
-        self.lab, self.db, self.snap_dir, self.timeout = lab, Audit(db_path), snap_dir, timeout
+    def __init__(self, lab, topo, db_path, snap_dir, timeout=300):
+        self.lab, self.topo, self.db, self.snap_dir, self.timeout = lab, topo, Audit(db_path), snap_dir, timeout
         self.lock = threading.Lock()  # ponytail: one change at a time across the whole lab, which is the point
 
     # ---------- stages 1-5 ----------
     def plan(self, raw):
         c = {"id": uuid.uuid4().hex[:8], "created_at": time.time(), "status": "RECEIVED", "reason": "",
-             "intent": raw, "candidate": {}, "diff": {}, "report": [], "stage": "received"}
+             "lab": self.topo.name, "intent": raw, "candidate": {}, "diff": {}, "report": [], "stage": "received"}
         self.db.event(c["id"], "received", "OK", json.dumps(raw, default=str)[:500])
         with self.lock:
             return self._plan(c)
 
     def _plan(self, c):
         try:
-            intent = schema.parse(c["intent"])
+            intent = schema.parse(c["intent"], self.topo)
         except ValidationError as e:
             return self._stop(c, "INVALID", "schema", schema.errors(e))
         c["normalized"] = intent.model_dump(mode="json")
         self.db.event(c["id"], "schema", "PASS", "intent is well-formed")
 
-        try:
-            before = self.lab.routes()
-        except LabError as e:
-            return self._stop(c, "BLOCKED", "lab", f"cannot read routers: {e}")
-        c["before"] = net.to_json(before)
+        before = self._ready(c)
+        if before is None:
+            return c
+        drift = _drift(before, self.approved()[0])
+        if drift:
+            return self._stop(c, "BLOCKED", "drift", f"the routers have changes made outside the agent ({_drift_text(drift)}); "
+                                                     "revert or accept them first")
 
-        error, next_hops = checks.semantic(intent, before)
+        error, ops = checks.semantic(intent, before, self.topo)
         if error:
             return self._stop(c, "BLOCKED", "semantic", error)
-        self.db.event(c["id"], "semantic", "PASS", f"next-hops: {', '.join(next_hops)}")
+        self.db.event(c["id"], "semantic", "PASS", f"{len(ops)} route change(s) on {', '.join(dict.fromkeys(o[0] for o in ops))}")
+        removed = (intent.router, str(intent.destination)) if intent.intent == "REMOVE_ROUTE" else None
+        return self._validate(c, before, ops, removed)
 
-        candidate = generator.generate(intent, next_hops)
+    def _ready(self, c):
+        """Read the routes and check the lab itself is healthy. Returns the routes, or None after stopping c."""
+        try:
+            before = self.lab.routes()
+            healthy, detail = deploy.preflight(self.lab, self.topo)
+        except LabError as e:
+            self._stop(c, "BLOCKED", "lab", f"cannot read routers: {e}")
+            return None
+        if not healthy:
+            self._stop(c, "BLOCKED", "preflight", detail)
+            return None
+        self.db.event(c["id"], "preflight", "PASS", detail)
+        c["before"] = to_json(before)
+        return before
+
+    def _validate(self, c, before, ops, removed=None, expect_loss=False):
+        """Stages 3-5, shared by intents and drift reverts: generate, allowlist, twin, FRR syntax, then wait for a human."""
+        candidate = generator.generate(ops)
         c["candidate"] = candidate
         bad = generator.not_allowed(candidate)
         if bad:
             return self._stop(c, "BLOCKED", "allowlist", f"command not allowed: {', '.join(bad)}")
         self.db.event(c["id"], "generate", "PASS", " | ".join(l for ls in candidate.values() for l in ls))
 
-        removed = (intent.router, str(intent.destination)) if intent.intent == "REMOVE_ROUTE" else None
-        after, report = twin.validate(before, candidate, removed)
+        after, report = twin.validate(before, candidate, self.topo, removed)
+        if expect_loss:  # a revert goes back to the approved state; paths that only worked because of the drift go away
+            report = [{**r, "ok": True, "detail": f"returning to the approved state: {r['detail']}"} if r["check"] == "reachability" and not r["ok"] else r
+                      for r in report]
         for router, lines in candidate.items():
             try:
                 ok, out = self.lab.dry_run(router, lines)
@@ -89,37 +112,46 @@ class Engine:
             return self._stop(c, "REJECTED", "approval", f"rejected by {approver}: {reason or 'no reason given'}")
 
     # ---------- stages 7-9 ----------
-    def apply(self, change_id, approver, reason="", simulate_failure=None):
+    def apply(self, change_id, approver, reason="", simulate_failure=None, failure_router=None):
         with self.lock:
             c = self._pending(change_id)
             if c["status"] != "PENDING_APPROVAL":
                 return c
             _check_person(approver, reason)
-            if simulate_failure not in (None, *deploy.FAULTS):
-                raise ValueError(f"simulate_failure must be one of {list(deploy.FAULTS)}")
-            c.update(approver=approver, approval_reason=reason, approved_at=time.time(), simulate_failure=simulate_failure)
+            if approver.lower() == str(c["intent"].get("requested_by", "")).lower():
+                raise ValueError(f"separation of duties: {approver} requested this change and cannot also approve it")
+            if c["lab"] != self.topo.name:
+                raise ValueError(f"change {change_id} was planned on lab {c['lab']}, the active lab is {self.topo.name}")
+            if simulate_failure:
+                deploy.fault(simulate_failure, self.topo, failure_router)  # validates the failure test before anything runs
+            c.update(approver=approver, approval_reason=reason, approved_at=time.time(),
+                     simulate_failure=simulate_failure, failure_router=failure_router)
             self.db.event(c["id"], "approval", "APPROVED", f"approved by {approver}: {reason or 'no reason given'}")
 
-            before = net.from_json(c["before"])
+            before = from_json(c["before"])
             after = twin.apply_candidate(before, c["candidate"])
             try:
+                healthy, detail = deploy.preflight(self.lab, self.topo)
+                if not healthy:
+                    return self._stop(c, "BLOCKED", "preflight", detail + " Nothing was deployed.")
                 if self.lab.routes() != before:
                     return self._stop(c, "BLOCKED", "revalidate", "network changed since validation, submit the intent again")
-                configs, c["backup_id"] = deploy.snapshot(self.lab, self.snap_dir, c["id"])
+                configs, c["backup_id"] = deploy.snapshot(self.lab, self.topo, self.snap_dir, c["id"])
             except (LabError, OSError) as e:
                 return self._stop(c, "BLOCKED", "backup", f"snapshot failed, nothing was deployed: {e}")
             self.db.event(c["id"], "backup", "PASS", f"snapshots/{c['id']}/ commit {c['backup_id']}")
 
             try:
-                ok, detail = deploy.deploy(self.lab, c["candidate"], simulate_failure)
+                ok, detail = deploy.deploy(self.lab, c["candidate"], self.topo, simulate_failure, failure_router)
                 self.db.event(c["id"], "deploy", "PASS" if ok else "FAIL", detail)
                 if ok:
-                    ok, detail = deploy.health(self.lab, after)
+                    ok, detail = deploy.health(self.lab, after, self.topo)
                     self.db.event(c["id"], "health", "PASS" if ok else "FAIL", detail)
             except LabError as e:
                 ok, detail = False, f"lab error during deploy: {e}"
             if ok:
                 c.update(status="SUCCESS", stage="done", reason=detail)
+                self._set_approved(after, f"change {c['id']} approved by {approver}")
                 self.db.event(c["id"], "result", "SUCCESS", detail)
                 self.db.save(c)
                 return c
@@ -127,10 +159,12 @@ class Engine:
             try:
                 rb_ok, rb_detail = deploy.rollback(self.lab, configs)
                 if rb_ok:
-                    rb_ok, rb_detail = deploy.health(self.lab, before)
+                    rb_ok, rb_detail = deploy.health(self.lab, before, self.topo)
             except LabError as e:
                 rb_ok, rb_detail = False, str(e)
             self.db.event(c["id"], "rollback", "PASS" if rb_ok else "FAIL", rb_detail)
+            if rb_ok:
+                self._set_approved(before, f"rollback of change {c['id']}")
             status = "ROLLED_BACK" if rb_ok else "ROLLBACK_FAILED"
             alert = "" if rb_ok else " OPERATOR ACTION NEEDED: network may be inconsistent."
             return self._stop(c, status, "deploy", f"{detail}. Rollback: {rb_detail}.{alert}")
@@ -144,18 +178,71 @@ class Engine:
         return [self._expire(c) for c in self.db.list()]
 
     def network(self):
-        routes = self.lab.routes()
-        lans = sorted({str(a.network) for r in net.NAMES for a in net.lans(r)}, key=IPv4Network)
-        reach = [{"src": s, "dst": d, "outcome": o, "path": p} for (s, d), (o, p) in sorted(twin.analyse(routes, lans).items())]
-        return {"routers": {r: {"node": net.ROUTERS[r]["node"], "connected": [str(x) for x in net.connected(r)],
-                                "addresses": [str(a.ip) for a in net.addresses(r)],
-                                "static": sorted(map(list, routes[r]), key=lambda x: IPv4Network(x[0]))} for r in net.NAMES},
-                "reachability": reach}
+        t, routes = self.topo, self.lab.routes()
+        lans = sorted(t.all_lans(), key=net_of)
+        reach = [{"src": s, "dst": d, "outcome": o, "path": p} for (s, d), (o, p) in sorted(twin.analyse(routes, lans, t).items())]
+        summary = t.summary()
+        for r, info in summary["routers"].items():
+            info.update(connected=[str(x) for x in t.connected(r)], addresses=[str(a.ip) for a in t.addresses(r)],
+                        static=sorted(map(list, routes[r]), key=lambda x: net_of(x[0])))
+        return {**summary, "reachability": reach}
 
     def reset(self):
-        """Put every router back to its baseline config from lab/configs/."""
-        return {r: self.lab.restore(r, (net.ROOT / "lab/configs" / net.ROUTERS[r]["node"] / "frr.conf").read_text())
-                for r in net.NAMES}
+        """Put every router back to the lab's baseline config (generated from lab.yaml)."""
+        routes = self.topo.baseline_routes()
+        result = {r: self.lab.restore(r, labgen.frr_conf(self.topo, r, routes)) for r in self.topo.names}
+        if all(ok for ok, _ in result.values()):
+            self._set_approved(routes, "reset to baseline")
+        return result
+
+    # ---------- drift: changes made outside the agent ----------
+    def _deployed_at(self):
+        p = LABS / self.topo.name / "build" / "deployed_at"
+        return p.read_text().strip() if p.exists() else ""
+
+    def approved(self):
+        """(routes, who/when) of the last state the agent put on the routers. A fresh deploy starts from the baseline."""
+        row = self.db.get_approved(self.topo.name)
+        if row and row["deployed_at"] == self._deployed_at():
+            return from_json(json.loads(row["routes"])), {"by": row["by"], "at": row["at"]}
+        return self.topo.baseline_routes(), {"by": "lab baseline", "at": None}
+
+    def _set_approved(self, routes, by):
+        self.db.set_approved(self.topo.name, self._deployed_at(), json.dumps(to_json(routes)), by)
+
+    def drift(self):
+        approved, meta = self.approved()
+        d = _drift(self.lab.routes(), approved)
+        return {"drift": bool(d), "routers": d, "summary": _drift_text(d) if d else "routers match the approved state",
+                "approved_by": meta["by"]}
+
+    def accept_drift(self, by):
+        with self.lock:
+            live = self.lab.routes()
+            d = _drift(live, self.approved()[0])
+            if not d:
+                raise ValueError("there is no drift to accept")
+            self._set_approved(live, f"drift accepted by {by}")
+            self.db.event("drift-" + uuid.uuid4().hex[:8], "drift", "ACCEPTED", f"{by} accepted {_drift_text(d)}")
+            return self.drift()
+
+    def plan_revert(self, requested_by):
+        """A normal change (twin, approval, deploy, rollback) that puts the routers back to the approved state."""
+        c = {"id": uuid.uuid4().hex[:8], "created_at": time.time(), "status": "RECEIVED", "reason": "", "lab": self.topo.name,
+             "intent": {"intent": "REVERT_DRIFT", "requested_by": requested_by, "reason": "return to the approved state"},
+             "candidate": {}, "diff": {}, "report": [], "stage": "received"}
+        self.db.event(c["id"], "received", "OK", json.dumps(c["intent"]))
+        with self.lock:
+            before = self._ready(c)
+            if before is None:
+                return c
+            d = _drift(before, self.approved()[0])
+            if not d:
+                return self._stop(c, "BLOCKED", "drift", "there is no drift to revert")
+            ops = [(r, "remove", p, nh) for r, x in d.items() for p, nh in x["unexpected"]] + \
+                  [(r, "add", p, nh) for r, x in d.items() for p, nh in x["missing"]]
+            self.db.event(c["id"], "semantic", "PASS", f"revert {_drift_text(d)}")
+            return self._validate(c, before, ops, expect_loss=True)
 
     # ---------- helpers ----------
     def _stop(self, c, status, stage, reason):
@@ -184,21 +271,45 @@ def _check_person(approver, reason):
         raise ValueError("reason contains characters that are not allowed")
 
 
+def _drift(live, approved):
+    """{router: {"unexpected": [(prefix, nh)], "missing": [...]}} for routers that differ."""
+    out = {}
+    for r in approved:
+        extra, missing = sorted(live.get(r, set()) - approved[r]), sorted(approved[r] - live.get(r, set()))
+        if extra or missing:
+            out[r] = {"unexpected": extra, "missing": missing}
+    return out
+
+
+def _drift_text(d):
+    parts = [f"{r}: " + ", ".join([f"+ ip route {p} {nh}" for p, nh in x["unexpected"]] + [f"- ip route {p} {nh}" for p, nh in x["missing"]])
+             for r, x in d.items()]
+    return "; ".join(parts)
+
+
 def _diff(before, after, candidate):
     """Per changed router: every static route line marked '+', '-' or ' '."""
     out = {}
     for r in candidate:
         b, a = before[r], after[r]
         out[r] = [("+" if x not in b else "-" if x not in a else " ") + f" ip route {x[0]} {x[1]}"
-                  for x in sorted(a | b, key=lambda x: (IPv4Network(x[0]), x[1]))]
+                  for x in sorted(a | b, key=lambda x: (net_of(x[0]), x[1]))]
     return out
 
 
-def default_engine():
+def db_path():
+    """The SQLite file holding the audit log, approved states and users."""
     import os
+    (ROOT / "data").mkdir(exist_ok=True)
+    return os.environ.get("NMA_DB") or str(ROOT / "data" / "audit.db")
+
+
+def default_engine(topo=None):
+    """Engine for the active lab (labs/<name>/lab.yaml, chosen with `agent.py lab use` or the dashboard)."""
+    import os
+    from backend import labctl
     from backend.lab import DockerLab
-    data = net.ROOT / "data"
-    data.mkdir(exist_ok=True)
-    return Engine(DockerLab(), os.environ.get("NMA_DB", data / "audit.db"),
-                  net.ROOT / os.environ.get("NMA_SNAPSHOTS", "snapshots"),
+    topo = topo or labctl.active_topology()
+    return Engine(DockerLab(topo), topo, db_path(),
+                  ROOT / os.environ.get("NMA_SNAPSHOTS", "snapshots"),
                   int(os.environ.get("NMA_APPROVAL_TIMEOUT", 300)))

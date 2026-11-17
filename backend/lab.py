@@ -2,36 +2,47 @@
 
 On macOS the routers run inside the OrbStack machine `clab`, so commands go through
 `orb -m clab docker`. Override with NMA_DOCKER (e.g. NMA_DOCKER=docker inside the VM).
+Reads and pings across routers run in parallel.
 """
+import json
 import os
 import shlex
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 
-from backend import net
+from backend.topology import parse_static
 
 DOCKER = shlex.split(os.environ.get("NMA_DOCKER") or ("orb -m clab docker" if sys.platform == "darwin" else "docker"))
+VM = DOCKER[:-1]  # prefix that runs a command where Docker lives ([] when already there)
+POOL = ThreadPoolExecutor(max_workers=16)
 
 
 class LabError(RuntimeError):
     pass
 
 
+def run(cmd, stdin=None, timeout=30):
+    try:
+        # input="" so `docker exec -i` never inherits (and swallows) the operator's terminal input
+        return subprocess.run(cmd, input=stdin or "", capture_output=True, text=True, timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise LabError(str(e)) from e
+
+
 class DockerLab:
+    def __init__(self, topo):
+        self.topo = topo
+
     def _exec(self, router, *cmd, stdin=None, timeout=30):
-        container = f"clab-{net.INV['lab']}-{net.ROUTERS[router]['node']}"
-        try:
-            # input="" so `docker exec -i` never inherits (and swallows) the operator's terminal input
-            return subprocess.run([*DOCKER, "exec", "-i", container, *cmd], input=stdin or "",
-                                  capture_output=True, text=True, timeout=timeout)
-        except (OSError, subprocess.TimeoutExpired) as e:
-            raise LabError(f"{router}: {e}") from e
+        p = run([*DOCKER, "exec", "-i", self.topo.container(router), *cmd], stdin, timeout)
+        if p.returncode != 0 and ("No such container" in p.stderr or "is not running" in p.stderr or "Cannot connect" in p.stderr):
+            raise LabError(f"{router}: {p.stderr.strip()} (is lab {self.topo.name} deployed?)")
+        return p
 
     def _vtysh(self, router, *commands):
         p = self._exec(router, "vtysh", *[x for c in commands for x in ("-c", c)])
         out = (p.stdout + p.stderr).strip()
-        if "No such container" in out or "Cannot connect" in out:
-            raise LabError(f"{router}: {out}")
         return p.returncode == 0 and "% " not in out, out
 
     def running_config(self, router):
@@ -41,7 +52,21 @@ class DockerLab:
         return out + "\n"
 
     def routes(self):
-        return {r: net.parse_static(self.running_config(r)) for r in net.NAMES}
+        configs = POOL.map(self.running_config, self.topo.names)
+        return {r: parse_static(c) for r, c in zip(self.topo.names, configs)}
+
+    def interface_states(self):
+        """{router: {ifname: {"up": bool, "ipv4": ["10.0.12.1/30", ...]}}}"""
+        def one(router):
+            p = self._exec(router, "ip", "-j", "addr", "show")
+            try:
+                data = json.loads(p.stdout or "[]")
+            except json.JSONDecodeError as e:
+                raise LabError(f"{router}: cannot read interfaces: {p.stderr.strip()}") from e
+            return {i["ifname"]: {"up": "UP" in i["flags"] and (i["ifname"] == "lo" or "LOWER_UP" in i["flags"]),
+                                  "ipv4": [f"{a['local']}/{a['prefixlen']}" for a in i.get("addr_info", []) if a["family"] == "inet"]}
+                    for i in data}
+        return dict(zip(self.topo.names, POOL.map(one, self.topo.names)))
 
     def dry_run(self, router, lines):
         """FRR's own parser judges the candidate (vtysh --dryrun) without changing anything."""
@@ -64,3 +89,7 @@ class DockerLab:
             if self._exec(router, "ping", "-c1", "-W1", "-I", src, dst).returncode == 0:
                 return True
         return False
+
+    def pings(self, jobs):
+        """[(router, src_ip, dst_ip), ...] -> [bool, ...], run in parallel."""
+        return list(POOL.map(lambda j: self.ping(*j), jobs))

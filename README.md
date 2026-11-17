@@ -12,184 +12,188 @@ Category: Cybersecurity
 | Faculty Guide | Dr. Tejaswi Khanna |
 
 Team introduction video: https://youtu.be/WGWgj6Aavbs
+Working Demo Video Link: https://youtu.be/j9w14NcGQWg
 
 ## What it does
 
-An operator states an intent (`ADD_ROUTE` or `REMOVE_ROUTE`). The agent turns it into FRR commands from fixed templates, proves the change is safe in a digital twin of a 3-router lab (no new loops, no new blackholes, no lost reachability, FRR's own parser accepts it), and waits for a person to approve it. On approval it snapshots all 3 routers to git, deploys, and checks routes and pings. If anything fails, all 3 routers are restored from the snapshot automatically. Every stage is written to a hash-chained SQLite audit log.
+An intent-based network agent for a lab of FRR routers. You design any topology (from a template or by drawing it), and the agent:
+1. Generates the lab, deploys it, and draws its map by itself.
+2. Takes requests as a form, as JSON, or in plain language ("connect R1 to R4", "R1 ko R4 tak pahunchao").
+3. Compiles them into router commands from fixed templates.
+4. Proves each change is safe in a digital twin.
+5. Waits for a second person to approve it.
+6. Deploys it to all routers as one transaction, verifies it, and rolls back every router automatically if anything fails.
+
+Every step lands in a tamper-evident audit log.
 
 ```
-intent ─▶ schema ─▶ semantic ─▶ template + allowlist ─▶ twin + FRR syntax ─▶ HUMAN APPROVAL
-                                                                                 │ approve
-        SUCCESS ◀─ health check ◀─ deploy (all-or-nothing) ◀─ snapshot + git ◀───┘
-        ROLLED_BACK ◀─ restore all 3 routers ◀─ (any failure)
+ plain language ─▶ grammar / LLM ─┐
+ form / JSON / CLI ───────────────┴▶ schema ─▶ pre-flight ─▶ drift check ─▶ semantic (CONNECT path compiler)
+                                         ─▶ templates + allowlist ─▶ twin (loop, blackhole, reachability) + FRR syntax
+                                         ─▶ APPROVAL by someone else ─▶ pre-flight ─▶ snapshot + git ─▶ deploy all routers
+                                         ─▶ health (links, routes, LAN pings) ─▶ SUCCESS  |  restore all routers ─▶ ROLLED_BACK
 ```
+
+Only `ip route …` / `no ip route …` ever reach a router. The language model, if used, only proposes intent JSON, which goes through every check above.
 
 ## Project layout
 
 | Path | What it is |
 |---|---|
-| `lab/topology.clab.yml` | 3 FRR routers (R1, R2, R3) in a triangle, Containerlab |
-| `lab/configs/r*/frr.conf` | Baseline router configs (mounted read-only) |
-| `lab/inventory.yaml` | Routers, link IPs, LANs. The only place IPs are defined |
-| `backend/schema.py` | Stage 1: Pydantic intent schema |
-| `backend/checks.py` | Stage 2: semantic checks (connected next-hop, conflict, duplicate, route exists) |
-| `backend/generator.py` | Stage 3: Jinja2 templates + command allowlist |
+| `labs/<name>/lab.yaml` | A lab as data: routers, links, optional addresses/routes/layout. Everything else is generated |
+| `labs/<name>/build/` | Generated containerlab file and router configs (not committed) |
+| `backend/topology.py` | Loads a lab: automatic addressing, validation, fast lookups, shortest paths |
+| `backend/labgen.py` | Templates (line, triangle, ring, star, mesh, tree, partial mesh) and config generation |
+| `backend/labctl.py` | Deploy / stop labs with containerlab in the VM, readiness wait, active lab |
+| `backend/schema.py` | Stage 1: intents `ADD_ROUTE`, `REMOVE_ROUTE`, `CONNECT` (Pydantic, checked against the active lab) |
+| `backend/checks.py` | Stage 2: semantic checks and the CONNECT path compiler |
+| `backend/generator.py` | Stage 3: Jinja2 templates + strict command allowlist |
 | `backend/twin.py` | Stage 4: digital twin (loop, blackhole, reachability) |
-| `backend/lab.py` | The only code that talks to routers (`docker exec … vtysh`), incl. FRR dry-run syntax check |
-| `backend/deploy.py` | Stages 7–9: snapshot + git, deploy, health check, rollback, fault injection |
-| `backend/audit.py` | SQLite audit log with hash chain |
-| `backend/engine.py` | `plan()`, `apply()`, `reject()`: the pipeline, approval timeout |
-| `backend/main.py` + `backend/static/index.html` | FastAPI + web dashboard |
-| `agent.py` | Terminal front end (demo fallback) |
-| `intents/` | Ready-made intents for the demo |
-| `tests/` | 20 scenarios; offline by default, `NMA_LIVE=1` runs them on the real routers |
-| `docs/` | Intent JSON Schema, test results, mentor pseudocode, slide notes |
+| `backend/lab.py` | The only code that talks to routers (`docker exec … vtysh`, parallel), FRR dry-run syntax check |
+| `backend/deploy.py` | Pre-flight, snapshot + git, deploy, health check, rollback, fault injection |
+| `backend/engine.py` | The pipeline, approval timeout, separation of duties, drift detection |
+| `backend/nlp.py` | Plain language → intents (offline grammar, else any OpenAI-compatible LLM) |
+| `backend/auth.py` | Users, roles, scrypt passwords, sessions |
+| `backend/audit.py` | SQLite audit log with a SHA-256 hash chain |
+| `backend/examples.py` | Demo examples found by the twin for whatever lab is active |
+| `backend/main.py`, `backend/static/` | FastAPI + dashboard (map, lab builder, review, history) |
+| `agent.py` | Terminal front end: labs, changes, plain language, users, drift |
+| `tests/` | 40 scenarios offline/live + live end-to-end on generated labs |
 
-## Setup, step by step (macOS, one time)
+## Setup (macOS, one time)
 
-Containerlab needs Linux, so the routers run in an OrbStack Linux machine called `clab`. The agent runs on the Mac and reaches the routers with `orb -m clab docker …`.
+Containerlab needs Linux, so the routers run in an OrbStack Linux machine called `clab`. The agent runs on the Mac and reaches them through `orb -m clab docker …`.
 
-**1. OrbStack and the Linux machine.** Install OrbStack (`brew install orbstack`), open it once, then create the machine:
+**1.** Install OrbStack (`brew install orbstack`), open it once, then create the machine:
 
 ```bash
 orb create ubuntu clab
 ```
 
-**2. Docker and Containerlab inside the machine.**
+**2.** Install Docker and Containerlab inside it:
 
 ```bash
 orb -m clab bash -c 'curl -sL https://containerlab.dev/setup | sudo -E bash -s "all"'
 ```
 
-Log out and in (`orb -m clab`), then check that `docker ps` works without sudo.
-
-**3. Pull the FRR router image.**
+**3.** Pull the FRR router image:
 
 ```bash
 orb -m clab docker pull quay.io/frrouting/frr:10.2.1
 ```
 
-**4. Start the lab.** OrbStack mounts your Mac home folder in the machine, so the same path works:
-
-```bash
-orb -m clab bash -c 'cd ~/Documents/the-lab/arena/AIORI-NMA/lab && sudo containerlab deploy -t topology.clab.yml'
-```
-
-**5. Python environment on the Mac.**
+**4.** Set up Python on the Mac:
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 ```
 
-**6. Check that everything works.**
+**5.** Deploy the demo lab and run the tests:
 
 ```bash
-.venv/bin/python agent.py status
+.venv/bin/python agent.py lab deploy triangle-demo
 ```
 
 ```bash
 .venv/bin/python -m pytest -q
 ```
 
-```bash
-NMA_LIVE=1 .venv/bin/python -m pytest -v
-```
-
-The first test run uses in-memory routers (2 seconds). The second runs the same 20 scenarios on the real FRR routers (about 30 seconds) and resets them to baseline before each test.
+**6.** Optional, for plain language in any language: copy `.env.example` to `.env` and fill in your OpenAI-compatible endpoint, key and model. Without it, the offline grammar still handles English and common Hinglish phrasing.
 
 ## Daily use
 
-Start OrbStack and the lab (step 4; it is a no-op if already running), then pick a front end.
-
-**Dashboard**, at http://localhost:8000:
+Start the dashboard at http://localhost:8000:
 
 ```bash
 .venv/bin/uvicorn backend.main:app --port 8000
 ```
 
-**Terminal**, which asks you to type `yes` to approve:
+On first start it creates the user `admin` and writes the password to `data/initial-admin-password`. Add people from the Labs tab, or from the terminal:
 
 ```bash
-.venv/bin/python agent.py apply intents/1-add-route.json
+.venv/bin/python agent.py user add ishika --role approver
 ```
 
-Other commands: `agent.py history`, `agent.py show <id>` (full audit trail), `agent.py reset` (all routers back to baseline), `agent.py verify-audit`, `agent.py schema`.
+Roles:
+- **operator:** proposes changes.
+- **approver:** also approves or rejects them. Nobody can approve their own change.
+- **admin:** also manages labs and users, and can accept drift.
 
-Stop the lab:
+Terminal equivalents (`python agent.py --help` lists all):
 
 ```bash
-orb -m clab bash -c 'cd ~/Documents/the-lab/arena/AIORI-NMA/lab && sudo containerlab destroy -t topology.clab.yml'
+.venv/bin/python agent.py lab new ring8 --template ring --routers 8
 ```
 
-Settings (environment variables): `NMA_APPROVAL_TIMEOUT` (seconds, default 300), `NMA_DB` (default `data/audit.db`), `NMA_DOCKER` (default `orb -m clab docker` on macOS, `docker` elsewhere).
+```bash
+.venv/bin/python agent.py lab deploy ring8
+```
 
-## The lab
+```bash
+.venv/bin/python agent.py ask "connect R1 to R5"
+```
 
-| Link / LAN | Addresses |
-|---|---|
-| R1–R2 | 10.0.12.0/30 (R1 .1, R2 .2) |
-| R2–R3 | 10.0.23.0/30 (R2 .1, R3 .2) |
-| R1–R3 | 10.0.13.0/30 (R1 .1, R3 .2) |
-| LANs | R1 10.10.10.0/24, R2 10.10.20.0/24, R3 10.10.30.0/24 and server LAN 10.10.31.0/24 |
+## Lab file format
 
-The baseline is set up so every demo story works from a fresh lab: every main LAN reaches every other; R3's server LAN `10.10.31.0/24` is not routed yet (the change to make), and R1 has a legacy detour `10.10.30.128/25 via R2` (the route to clean up, and the bait for the loop).
+Minimal; addresses, interfaces and starting routes are derived:
 
-## Demo script (about 6 minutes)
+```yaml
+name: campus
+routers: [R1, R2, R3, R4]
+links: [[R1, R2], [R2, R3], [R3, R4], [R4, R1], [R1, R3]]
+baseline: shortest-path        # or none: start empty and build routing with CONNECT
+```
 
-Run `agent.py reset` first. Use the "Try an example" buttons in the dashboard, or the files in `intents/`.
+Optional: per-router LANs (`R3: {lans: [10.10.30.1/24]}`), fixed link subnets (`{a: R1, b: R2, subnet: 10.0.12.0/30}`), extra `routes`, and a saved map `layout`. See `labs/triangle-demo/lab.yaml`. Limit: 30 routers per lab (4 GB VM).
 
-1. **The lab:** the triangle, the reachability table (R1 and R2 cannot reach `10.10.31.0/24`).
-2. **Good change** (`1-add-route.json`, next hop given as `R3`): 4 checks pass, green diff, approve. Watch backup → deploy → 7 LAN pings → SUCCESS. The table now shows R1 reaching `…31.0/24`.
-3. **Loop** (`3-loop.json`): blocked; the map draws R2 → R1 → R2 in red.
-4. **Blackhole** (`4-blackhole.json`): blocked; traffic would be dropped at R2.
-5. **Rejected change:** validate `2-remove-route.json`, click Reject. The routes are untouched.
-6. **Failed deploy:** validate `2-remove-route.json` again, set the failure test to "A link goes down after deploy", approve. Pings fail, all 3 routers are restored, status ROLLED_BACK.
-7. **History** tab, then `NMA_LIVE=1 .venv/bin/python -m pytest -v`, showing 20 passed.
+## Intents
 
-## Tests (20 scenarios, all passing offline and on the live lab)
+| Intent | Example | What the agent does |
+|---|---|---|
+| `ADD_ROUTE` | R1, 10.10.31.0/24, next hop R3 | One static route; next hop must be a direct neighbour |
+| `REMOVE_ROUTE` | R1, 10.10.30.128/25 | Looks up the existing next hop, removes it |
+| `CONNECT` | R1 ⇄ R4 | Shortest path over the links; adds only the routes that are missing on each hop, in both directions; one transaction |
 
-| # | Scenario | PS category | Result |
-|---|---|---|---|
-| 1 | Valid ADD_ROUTE, approved | Happy path | Deployed, health check passes |
-| 2 | Valid REMOVE_ROUTE, approved | Happy path | Next-hop looked up, route removed |
-| 3 | Missing field | Invalid config | INVALID at schema |
-| 4 | Bad IP / prefix with host bits | Invalid config | INVALID at schema |
-| 5 | Unknown router R99 | Invalid config | INVALID at schema |
-| 6 | Next-hop not connected | Invalid config | BLOCKED at semantic |
-| 7 | Same prefix, other next-hop | Conflicting route | BLOCKED (conflict) |
-| 8 | Change creates a loop | Conflicting route | BLOCKED by twin, path named (2- and 3-router loops) |
-| 9 | Human rejects | Rejected approval | Routers untouched; can never deploy later |
-| 10 | Approval timeout | Rejected approval | Treated as reject |
-| 11 | R3 fails mid-deploy | Failed deployment | All 3 routers rolled back |
-| 12 | Deploy OK, pings fail | Failed deployment | Automatic rollback, network restored |
-| 13 | Command injection (`; reboot`, newline, extra field) | Invalid config | INVALID; allowlist rejects non-route lines |
-| 14 | Duplicate route | Conflicting route | BLOCKED as no-op |
-| 15 | Remove a route that does not exist | Invalid config | BLOCKED |
-| 16 | Invalid intent type | Invalid config | INVALID |
-| 17 | Change creates a blackhole | Conflicting route | BLOCKED by twin |
-| 18 | Several changes in a row | Happy path | Each applied, snapshotted and logged separately |
-| 19 | Rollback verification | Failed deployment | Running-config equals snapshot byte for byte |
-| 20 | Audit log | Auditability | Every stage recorded; tampering breaks the hash chain |
+## Demo script (about 7 minutes)
 
-Saved output: `docs/test-results.txt`.
+1. **Labs tab:** draw a 5-router lab (or pick a template), "Create and deploy". The map draws itself and the reachability table shows 0 paths.
+2. **Plain language:** type "R1 ko R4 tak pahunchao" and click Understand. Check the CONNECT card and validate it. Blue arrows show the routes on every hop. Approve as a different user; the table shows the new paths.
+3. **Separation of duties:** as the requester, the dashboard refuses to let you approve your own change.
+4. **Loop / blackhole:** use the generated example buttons. The twin blocks them and draws the path in red or amber.
+5. **Failed deploy:** approve with the failure test "A link goes down after deploy". The dead link is detected, every router is restored, and the status is ROLLED_BACK.
+6. **Drift:** on a router, `vtysh -c 'conf t' -c 'ip route 10.10.99.0/24 <neighbour IP>'`. The banner appears and new changes are blocked. "Revert through approval", then approve.
+7. **Broken lab:** `orb -m clab docker restart clab-<lab>-r1`, then submit a change. Pre-flight refuses it and names the missing interfaces. Redeploy the lab.
+8. **History and tests:** `python -m pytest -q`, which runs 57 checks offline.
+
+## Tests
+
+| File | What | How to run |
+|---|---|---|
+| `tests/test_scenarios.py` | The original 20 scenarios: 4 PS categories, happy paths, injection, audit | offline; `NMA_LIVE=1` on real routers |
+| `tests/test_round2.py` | 20 more: templates, addressing, CONNECT, plain language, LLM validation, pre-flight, drift, login/roles, API identity, examples, speed | offline; `NMA_LIVE=1` on real routers |
+| `tests/test_live_labs.py` | Generate ring/tree/partial-mesh labs, deploy, CONNECT, forced rollback, destroy | `NMA_LIVE_LABS=1` |
+
+Results: `docs/test-results.txt` (57 offline, 57 live, 3 generated labs live, all passing).
 
 ## Security principles
 
 | Principle | Where |
 |---|---|
-| Least privilege | Only 2 intent types (`schema.py`); routers outside the inventory are rejected |
-| No arbitrary commands | Templates + strict allowlist regex (`generator.py`); the operator never types CLI |
-| Input validation | Pydantic with `extra="forbid"`, typed IPs, safe-text patterns (`schema.py`), semantic checks (`checks.py`) |
-| Test before change | Digital twin + FRR `vtysh --dryrun` before approval (`twin.py`, `lab.py`) |
-| Human-in-the-loop | Approve/reject with name and reason; timeout = reject (`engine.py`) |
-| Safe recovery | Git-committed snapshots, all-router rollback, re-check after rollback (`deploy.py`) |
-| Auditability | Every stage logged with who, what, when, why; SHA-256 hash chain (`audit.py`) |
-| Isolation | Lab only; next-hops must be lab routers, so the management network cannot be used |
-| Consistency | Apply re-reads the routes and refuses if the network changed since validation (`engine.py`) |
+| Least privilege | Three intents only; roles operator / approver / admin (`auth.py`, `main.py`) |
+| No arbitrary commands | Templates + strict allowlist (`generator.py`); LLM output is intents, never CLI (`nlp.py`) |
+| Input validation | Pydantic, `extra="forbid"`, typed IPs, safe-text patterns, lab-aware router names (`schema.py`) |
+| Test before change | Pre-flight lab health, digital twin, FRR `vtysh --dryrun` (`deploy.py`, `twin.py`, `lab.py`) |
+| Human-in-the-loop | Approval required; timeout = reject; requester can never approve their own change (`engine.py`) |
+| Authentication | scrypt password hashes, HttpOnly session cookie, identity taken from the session, not the request (`auth.py`) |
+| Safe recovery | Git-committed snapshots, all-router rollback, re-verified after rollback (`deploy.py`) |
+| Consistency | Drift detection blocks changes while routers differ from the approved state (`engine.py`) |
+| Auditability | Every stage, every plain-language request, every login-protected action; SHA-256 hash chain (`audit.py`) |
+| Isolation | Lab only, single vendor (FRR), next hops must be lab routers |
+| Untrusted AI | LLM output validated by the same schema; unknown fields and routers dropped; human approves |
 
-## Choices that differ from the original plan
+## Limits and future work
 
-- **Dashboard** is one HTML file served by FastAPI instead of Next.js: no build step and one process, so there is no need for Docker Compose either. Each of the 5 screens is there: network status, create change, validation result, approval with diff, history.
-- **Twin** walks next-hops in plain Python instead of networkx; the walk takes about 15 lines.
-- **`/validate`** is folded into `POST /api/intent`, which validates and returns the report in one call.
-- **LLM front door** is not built (optional in the PS).
+- One lab runs at a time; one change at a time per lab (global lock).
+- The twin models static routing only; OSPF/BGP would need a protocol model (or Batfish).
+- Sessions live in memory: restarting the server signs everyone out.
+- Real devices would need a transport adapter (NETCONF, RFC 6241; YANG, RFC 7950) in place of `docker exec`.
