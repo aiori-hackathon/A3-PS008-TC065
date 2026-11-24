@@ -33,11 +33,14 @@ An intent-based network agent that turns a plain-language request into router co
 
 ### Watch the demo
 
-<a href="https://youtu.be/j9w14NcGQWg"><img src="docs/media/demo-cover.jpg" alt="Watch the working demo on YouTube" width="640"></a>
-
-<sub><a href="https://youtu.be/j9w14NcGQWg">Working demo</a> · <a href="https://youtu.be/WGWgj6Aavbs">Team introduction</a></sub>
-
 </div>
+
+<table>
+<tr>
+<td width="50%" align="center"><a href="docs/media/ps008-demo.mp4"><img src="docs/media/walkthrough-cover.jpg" alt="Play the 90-second captioned walkthrough"></a><br><b>90-second walkthrough</b><br><sub>Every PS-008 requirement on the live routers, with captions. <a href="docs/media/ps008-demo.mp4">MP4, 1:28</a></sub></td>
+<td width="50%" align="center"><a href="https://youtu.be/j9w14NcGQWg"><img src="docs/media/demo-cover.jpg" alt="Watch the full working demo on YouTube"></a><br><b>Full working demo</b><br><sub>The longer walkthrough on <a href="https://youtu.be/j9w14NcGQWg">YouTube</a> · <a href="https://youtu.be/WGWgj6Aavbs">Team introduction</a></sub></td>
+</tr>
+</table>
 
 **Jump to:** [Judge fast path](#judge-fast-path) · [Headline results](#headline-results) · [See it work](#see-it-work) · [How it works](#how-it-works) · [Requirements coverage](#requirements-coverage) · [Quickstart](#quickstart) · [Daily use](#daily-use) · [Intents](#intents) · [Standards](#standards-yang-and-netconf) · [Tests](#tests) · [Security](#security-principles) · [Repository map](#repository-map) · [Honest limits](#honest-limits) · [References](#references)
 
@@ -51,12 +54,13 @@ An intent-based network agent that turns a plain-language request into router co
 **Category:** Cybersecurity  
 **Presentation:** [`A3-PS008-TC065 Network Management Agent.pdf`](A3-PS008-TC065%20Network%20Management%20Agent.pdf)  
 **Working demo:** https://youtu.be/j9w14NcGQWg  
+**90-second walkthrough:** [`docs/media/ps008-demo.mp4`](docs/media/ps008-demo.mp4)  
 **Team introduction:** https://youtu.be/WGWgj6Aavbs
 
 ## Judge fast path
 
 - **Every PS-008 requirement, with proof:** [`docs/JUDGES.md`](docs/JUDGES.md#1-every-requirement-with-proof), printable as [`docs/judge-sheet.pdf`](docs/judge-sheet.pdf)
-- **Demo video:** https://youtu.be/j9w14NcGQWg
+- **Demo videos:** [90-second walkthrough](docs/media/ps008-demo.mp4) (every requirement, with captions) · [full demo on YouTube](https://youtu.be/j9w14NcGQWg)
 - **Test results:** [`docs/test-results.txt`](docs/test-results.txt): 72 checks pass offline and on real FRR routers
 - **Run it yourself:** [Quickstart](#quickstart), then `.venv/bin/python -m pytest -q` (no routers needed)
 - **What it does not do:** [Honest limits](#honest-limits)
@@ -379,7 +383,7 @@ This is a lab prototype, and we would rather state its limits than have you find
 
 <sub>PS-008 Network Management Agent for Reviewed Configuration Changes</sub>  
 <sub>Team A3-PS008-TC065 · AIORI-3 Hackathon · Cybersecurity</sub>  
-<sub>[Judge pack](docs/JUDGES.md) · [Judge sheet](docs/judge-sheet.pdf) · [Demo video](https://youtu.be/j9w14NcGQWg) · [Test results](docs/test-results.txt) · [Honest limits](#honest-limits) · [Back to top](#ps-008-network-management-agent-for-reviewed-configuration-changes)</sub>  
+<sub>[Judge pack](docs/JUDGES.md) · [Judge sheet](docs/judge-sheet.pdf) · [Demo video](https://youtu.be/j9w14NcGQWg) · [90-second walkthrough](docs/media/ps008-demo.mp4) · [Test results](docs/test-results.txt) · [Honest limits](#honest-limits) · [Back to top](#ps-008-network-management-agent-for-reviewed-configuration-changes)</sub>  
 <sub>Built on FRRouting, Containerlab, FastAPI, Pydantic, yangson and pyang</sub>
 
 <div align="center">
