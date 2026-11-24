@@ -1,5 +1,7 @@
 # PS-008 test results, 2026-11-17 12:30 IST
 
+Offline suite re-run 2026-11-24 before the regional round: 72 passed, 3 skipped (the 3 skipped are the generated-lab live tests, run with NMA_LIVE_LABS=1).
+
 ## Offline: 72 checks (48 scenarios, some run on several topologies), in-memory routers
 tests/test_live_labs.py::test_generated_lab_end_to_end[ring-6] SKIPPED   [  1%]
 tests/test_live_labs.py::test_generated_lab_end_to_end[tree-7] SKIPPED   [  2%]

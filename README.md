@@ -14,6 +14,14 @@ Category: Cybersecurity
 Team introduction video: https://youtu.be/WGWgj6Aavbs
 Working Demo Video Link: https://youtu.be/j9w14NcGQWg
 
+## Judge fast path
+
+- **Every PS-008 requirement, with proof:** [`docs/JUDGES.md`](docs/JUDGES.md#1-every-requirement-with-proof) (printable: [`docs/judge-sheet.pdf`](docs/judge-sheet.pdf))
+- **Demo video:** https://youtu.be/j9w14NcGQWg
+- **Test results:** [`docs/test-results.txt`](docs/test-results.txt): 72 checks pass offline and on real FRR routers
+- **Run it:** [Setup](#setup-macos-one-time), then `.venv/bin/python -m pytest -q` (no routers needed)
+- **What it does not do:** [Honest limits](docs/JUDGES.md#2-honest-limits)
+
 ## What it does
 
 An intent-based network agent for a lab of FRR routers. You design any topology (from a template or by drawing it), and the agent:
@@ -202,7 +210,7 @@ python agent.py confirm <id>   |   python agent.py cancel <id>
 | `tests/test_standards.py` | 8 more: confirmed commit (confirm, time out, cancel, bounds), YANG lint, YANG rejects what the model forbids, YANG accepts real requests | offline; `NMA_LIVE=1` on real routers |
 | `tests/test_live_labs.py` | Generate ring/tree/partial-mesh labs, deploy, CONNECT, forced rollback, destroy | `NMA_LIVE_LABS=1` |
 
-Results: `docs/test-results.txt` (57 offline, 57 live, 3 generated labs live, all passing).
+Results: `docs/test-results.txt` (72 checks offline, 72 on the real triangle-demo routers, 3 of 3 generated labs live, all passing).
 
 ## Security principles
 
@@ -225,4 +233,6 @@ Results: `docs/test-results.txt` (57 offline, 57 live, 3 generated labs live, al
 - One lab runs at a time; one change at a time per lab (global lock).
 - The twin models static routing only; OSPF/BGP would need a protocol model (or Batfish).
 - Sessions live in memory: restarting the server signs everyone out.
+- The audit log is tamper-evident, not tamper-proof: someone with full database access could rewrite the whole chain.
+- Tested in a lab on one laptop, not on physical routers. The full list is in [`docs/JUDGES.md`](docs/JUDGES.md#2-honest-limits).
 - The intents are modelled in YANG and deployment follows NETCONF's confirmed commit, but the agent still reaches the routers with `docker exec`. Real devices would need a NETCONF client (for example ncclient) in place of `backend/lab.py`.

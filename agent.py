@@ -26,7 +26,8 @@ import select
 import sys
 import time
 
-from backend import auth, labctl, labgen, nlp, schema, yangcheck
+from backend import auth, deploy, labctl, labgen, nlp, schema, yangcheck
+from backend.lab import LabError
 from backend.engine import db_path, default_engine
 from backend.topology import ROOT, Topology, lab_names
 
@@ -62,7 +63,16 @@ def print_change(c):
 
 
 def cmd_status(args):
-    n = default_engine().network()
+    eng = default_engine()
+    try:
+        ok, msg = deploy.preflight(eng.lab, eng.topo)
+    except LabError as e:
+        ok, msg = False, str(e)
+    print(paint("GO", "PASS") if ok else paint("NO-GO", "FAIL"), msg)
+    if not ok:
+        print(f"Fix: .venv/bin/python agent.py lab deploy {eng.topo.name}")
+        return 1
+    n = eng.network()
     print(f"Lab {n['name']} ({n['template']}): {len(n['routers'])} routers, {len(n['links'])} links")
     for r, info in n["routers"].items():
         print(f"{r}  LANs: {', '.join(info['lans'])}")
