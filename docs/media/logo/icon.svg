@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-label="Network Management Agent icon">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3B76FF"/><stop offset="1" stop-color="#2852B8"/></linearGradient></defs>
+<rect x="0" y="0" width="96" height="96" rx="24" fill="url(#g)"/>
+<g transform="translate(0,0) scale(1)" stroke="#fff" stroke-width="5" stroke-linecap="round" fill="none">
+<path d="M48 30 L28 66 M48 30 L68 66 M28 66 L68 66" opacity=".9"/>
+<circle cx="48" cy="28" r="9" fill="#2852B8"/><circle cx="26" cy="68" r="9" fill="#2852B8"/><circle cx="70" cy="68" r="9" fill="#2852B8"/>
+</g>
+</svg>

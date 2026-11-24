@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="132" viewBox="0 0 640 132" role="img" aria-label="PS-008 Network Management Agent">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3B76FF"/><stop offset="1" stop-color="#2852B8"/></linearGradient></defs>
+<rect x="8" y="18" width="96" height="96" rx="24" fill="url(#g)"/>
+<g transform="translate(8,18) scale(1)" stroke="#fff" stroke-width="5" stroke-linecap="round" fill="none">
+<path d="M48 30 L28 66 M48 30 L68 66 M28 66 L68 66" opacity=".9"/>
+<circle cx="48" cy="28" r="9" fill="#2852B8"/><circle cx="26" cy="68" r="9" fill="#2852B8"/><circle cx="70" cy="68" r="9" fill="#2852B8"/>
+</g>
+<text x="128" y="44" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" letter-spacing="2.2" fill="#7FA2FF">AIORI-3 · PS-008 · CYBERSECURITY</text>
+<text x="126" y="84" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="35" font-weight="800" letter-spacing="-0.6" fill="#F4F6FB">Network Management Agent</text>
+<text x="128" y="111" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="15.5" fill="#A9B3CC">Reviewed configuration changes, proven before they reach a router</text>
+</svg>
